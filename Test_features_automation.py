@@ -12,7 +12,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from appium.webdriver.common.appiumby import AppiumBy
 from datetime import datetime
 
-print("\nTotal_Enable_features_automation.py - Automation test starting!\n App should open now Notifications view run this test.")
+print("\nTest_features_automation.py - Automation test starting!\n App should open now Notifications view run this test.")
 time.sleep(2)
 
 # Default test result is false if tests not passed
@@ -27,8 +27,8 @@ start_param = sys.argv[1] if len(sys.argv) > 1 else None
 options = UiAutomator2Options()
 options.platform_name = "Android"
 options.device_name = "Android_test_device"  
-options.app_package = "com.fsecure.ms.safe"
-options.app_activity = "com.fsecure.ui.main.MainNavigationActivity"
+options.app_package = "fi.sbweather.app"
+options.app_activity = "fi.sbweather.app.MainActivity"
 options.automation_name = "UiAutomator2"
 # Prevent app reset as this test is ran after automation test
 options.no_reset = True
@@ -46,7 +46,7 @@ def save_screenshot(driver, filename_prefix, timestamp, failed=False):
     return filepath
 
 try:
-    # App should be on Notifications view to start and run these tests
+    # App should be on Main view to start and ready to run some tests
     time.sleep(4)  
 
     #print("Current package:", driver.current_package)

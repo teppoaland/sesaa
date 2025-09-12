@@ -14,7 +14,7 @@ print("\nAny_App_Installation_From_GP_automation.py - GP installation starting!\
 
 # Fixed package names
 FIXED_PACKAGES = [
-    ("com.fsecure.ms.safe", "F-Secure Total Security"),
+    ("fi.sbweather.app", "Sebitti Sää"),
     ("fi.reportronic.app", "Reportronic")
 ]
 
