@@ -1,0 +1,98 @@
+name: Activation-Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  activation-test:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install --upgrade Appium-Python-Client
+
+      - name: Verify ADB connection
+        shell: powershell
+        run: |
+          adb kill-server
+          adb start-server
+          Write-Host "Connected devices:"
+          adb devices
+          $deviceCount = (adb devices | Select-Object -Skip 1 | Where-Object { $_ -match "device$" } | Measure-Object).Count
+          if ($deviceCount -eq 0) {
+            Write-Error "No devices connected"
+            exit 1
+          }
+
+      - name: Start Appium server and run tests
+        shell: powershell
+        run: |
+          # Kill any existing Appium processes
+          Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*appium*" } | Stop-Process -Force
+          Write-Host "Killed existing Appium processes (if any)"
+
+          # Free port 4723 if it's in use
+          $tcpConnection = Get-NetTCPConnection -LocalPort 4723 -ErrorAction SilentlyContinue
+          if ($tcpConnection -and $tcpConnection.OwningProcess) {
+            Get-Process -Id $tcpConnection.OwningProcess -ErrorAction SilentlyContinue | Stop-Process -Force
+            Write-Host "Freed port 4723"
+          }
+
+          # Start Appium server as a background job
+          Write-Host "Starting Appium server..."
+          $appiumJob = Start-Job -ScriptBlock {
+            node "$(npm root -g)/appium/build/lib/main.js" -p 4723 --allow-insecure=*:adb_shell
+          }
+          
+          # Wait for Appium to start
+          $timeout = 60
+          $counter = 0
+          $appiumReady = $false
+          
+          while ($counter -lt $timeout) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:4723/status" -UseBasicParsing -TimeoutSec 2
+              if ($response.StatusCode -eq 200) {
+                Write-Host "Appium server is ready!"
+                $appiumReady = $true
+                break
+              }
+            } catch {
+              Write-Host "Waiting for Appium to start... ($counter/$timeout)"
+              Start-Sleep -Seconds 2
+              $counter += 2
+            }
+          }
+
+          if (-not $appiumReady) {
+            Write-Error "Appium failed to start within timeout period"
+            # Try to get logs for debugging
+            Receive-Job $appiumJob -ErrorAction SilentlyContinue
+            exit 1
+          }
+
+          # Run the Python tests
+          Write-Host "Running alll Python tests..."
+          python -u Total_Installation_From_GP_automation.py
+          python -u Total_Activation_automation.py clean
+          python -u Total_Enable_features_automation.py
+          $testExitCode = $LASTEXITCODE
+          
+          # Stop Appium server
+          Write-Host "Stopping Appium server..."
+          Stop-Job $appiumJob -ErrorAction SilentlyContinue
+          Remove-Job $appiumJob -Force -ErrorAction SilentlyContinue
+          
+          # Exit with the test result code
+          exit $testExitCode
