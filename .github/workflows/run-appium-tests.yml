@@ -20,10 +20,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -43,89 +43,72 @@ jobs:
           script: echo "Emulator started"
 
       - name: Verify ADB connection
-        shell: powershell
+        shell: bash
         run: |
           adb kill-server
           adb start-server
-          Write-Host "Connected devices:"
+          echo "Connected devices:"
           adb devices
           
-          if (${{ !github.event.inputs.use_emulator }}) {
-            $deviceCount = (adb devices | Select-Object -Skip 1 | Where-Object { $_ -match "device$" } | Measure-Object).Count
-            if ($deviceCount -eq 0) {
-              Write-Error "No devices connected"
+          if [ "${{ github.event.inputs.use_emulator }}" != "true" ]; then
+            deviceCount=$(adb devices | tail -n +2 | grep "device$" | wc -l)
+            if [ "$deviceCount" -eq 0 ]; then
+              echo "No devices connected"
               exit 1
-            }
-          }
+            fi
+          fi
 
       - name: Start Appium server and run tests
-        shell: powershell
+        shell: bash
         run: |
           # Kill any existing Appium processes
-          Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*appium*" } | Stop-Process -Force
-          Write-Host "Killed existing Appium processes (if any)"
+          pkill -f "appium" || true
+          echo "Killed existing Appium processes (if any)"
 
           # Free port 4723 if it's in use
-          $tcpConnection = Get-NetTCPConnection -LocalPort 4723 -ErrorAction SilentlyContinue
-          if ($tcpConnection -and $tcpConnection.OwningProcess) {
-            Get-Process -Id $tcpConnection.OwningProcess -ErrorAction SilentlyContinue | Stop-Process -Force
-            Write-Host "Freed port 4723"
-          }
+          fuser -k 4723/tcp || true
+          echo "Freed port 4723"
 
-          # Start Appium server as a background job
-          Write-Host "Starting Appium server..."
-          $appiumJob = Start-Job -ScriptBlock {
-            node "$(npm root -g)/appium/build/lib/main.js" -p 4723 --allow-insecure=*:adb_shell
-          }
-          
-          # Wait for Appium to start
-          $timeout = 60
-          $counter = 0
-          $appiumReady = $false
-          
-          while ($counter -lt $timeout) {
-            try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:4723/status" -UseBasicParsing -TimeoutSec 2
-              if ($response.StatusCode -eq 200) {
-                Write-Host "Appium server is ready!"
-                $appiumReady = $true
-                break
-              }
-            } catch {
-              Write-Host "Waiting for Appium to start... ($counter/$timeout)"
-              Start-Sleep -Seconds 2
-              $counter += 2
-            }
-          }
+          # Start Appium server in background
+          echo "Starting Appium server..."
+          nohup npx appium -p 4723 --allow-insecure=*:adb_shell > appium.log 2>&1 &
+          sleep 10
 
-          if (-not $appiumReady) {
-            Write-Error "Appium failed to start within timeout period"
-            Receive-Job $appiumJob -ErrorAction SilentlyContinue
-            exit 1
-          }
+          # Wait for Appium to be ready
+          timeout=60
+          counter=0
+          until curl -s http://127.0.0.1:4723/status | grep -q "200"; do
+            if [ $counter -ge $timeout ]; then
+              echo "Appium failed to start within timeout period"
+              cat appium.log
+              exit 1
+            fi
+            echo "Waiting for Appium to start... ($counter/$timeout)"
+            sleep 2
+            counter=$((counter+2))
+          done
+          echo "Appium server is ready!"
 
           # Determine test parameters
-          $screenshotParam = ""
-          if (${{ github.event.inputs.save_all_screenshots }}) {
-            $screenshotParam = "all"
-          }
+          screenshotParam=""
+          if [ "${{ github.event.inputs.save_all_screenshots }}" == "true" ]; then
+            screenshotParam="all"
+          fi
 
           # Run the Python tests
-          Write-Host "Running all Python tests..."
+          echo "Running all Python tests..."
           python -u Any_app_Installation_From_GP_automation.py $screenshotParam
           python -u Test_features_automation.py $screenshotParam
-          $testExitCode = $LASTEXITCODE
-          
-          # Stop Appium server
-          Write-Host "Stopping Appium server..."
-          Stop-Job $appiumJob -ErrorAction SilentlyContinue
-          Remove-Job $appiumJob -Force -ErrorAction SilentlyContinue
-          
-          # Exit with the test result code
+          testExitCode=$?
+
+          # Stop Appium
+          pkill -f "appium" || true
+          echo "Stopped Appium server"
+
           exit $testExitCode
 
       - name: Upload test artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test-artifacts
           path: |
