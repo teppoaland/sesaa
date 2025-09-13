@@ -2,12 +2,13 @@ import subprocess
 import sys
 
 test_files = [
-    "Total_Installation_From_GP_automation.py",
-    "Total_Activation_automation.py",
-    "Total_Enable_features_automation.py"
+    "Any_App_Installation_From_GP_automation.py",
+    "Test_features_automation.py",
 ]
 
-print("🚀 Starting all tests...\n")
+print("\n\n🚀 Starting all tests...\n")
+
+all_passed = True
 
 for test_file in test_files:
     print(f"📋 Running {test_file}...")
@@ -15,7 +16,12 @@ for test_file in test_files:
         result = subprocess.run([sys.executable, test_file], check=True)
         print(f"✅ {test_file} passed!\n")
     except subprocess.CalledProcessError as e:
-        print(f"❌ {test_file} failed with error: {e}")
-        sys.exit(1)
+        print(f"❌ {test_file} failed with exit code: {e.returncode}")
+        all_passed = False
 
-print("🎉 All tests completed successfully!")
+if all_passed:
+    print("🎉 All tests completed successfully!")
+    sys.exit(0)
+else:
+    print("💥 Some tests failed.")
+    sys.exit(1)

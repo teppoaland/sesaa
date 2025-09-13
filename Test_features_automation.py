@@ -1,28 +1,23 @@
 import time
 import os
 import sys
-import subprocess
 from appium import webdriver
 from appium.options.android import UiAutomator2Options
-from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from appium.webdriver.common.appiumby import AppiumBy
 from datetime import datetime
+from appium.webdriver.common.appiumby import AppiumBy
 
-print("\nTest_features_automation.py - Automation test starting!\n App should open now Notifications view run this test.")
-time.sleep(2)
-
-# Default test result is false if tests not passed
-test_passed = False
+# Read optional start parameter - Optional, not used in this test
+start_param = sys.argv[1] if len(sys.argv) > 1 else None
 
 # Create timestamp
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-# Read optional start parameter
-start_param = sys.argv[1] if len(sys.argv) > 1 else None
+# Default test result is false if tests not passed
+test_passed = False
 
 options = UiAutomator2Options()
 options.platform_name = "Android"
@@ -30,7 +25,7 @@ options.device_name = "Android_test_device"
 options.app_package = "fi.sbweather.app"
 options.app_activity = "fi.sbweather.app.MainActivity"
 options.automation_name = "UiAutomator2"
-# Prevent app reset as this test is ran after automation test
+# Prevent app reset as this test is ran after installation test - On this case this is optional
 options.no_reset = True
 options.full_reset = False
 
@@ -45,108 +40,206 @@ def save_screenshot(driver, filename_prefix, timestamp, failed=False):
     print(f"Screenshot saved: {filepath}")
     return filepath
 
+print("\nTest_features_automation.py - Automation test starting...")
+time.sleep(2)
+
 try:
-    # App should be on Main view to start and ready to run some tests
-    time.sleep(4)  
-
-    #print("Current package:", driver.current_package)
-    #print("Current activity:", driver.current_activity)
-
-    # Press Allow button
-    print("Press Allow button...")    
-    driver.find_element("accessibility id", "Allow").click()
-    time.sleep(3)
-
-    # Press Allow notifications button
-    print("Press Allow notifications button...")    
-    driver.find_element(By.ID, "com.android.permissioncontroller:id/permission_allow_button").click()
-    time.sleep(3)
-
-    # Press Get started 1 (Device Protection) button
-    save_screenshot(driver, "Get_started", timestamp)
-    print("Press Get started 1, Device Protection, button...")    
-    #driver.find_element("accessibility id", "Get started").click()
-    driver.find_element(By.XPATH, "//android.widget.Button[@content-desc='Get started']").click()
-    time.sleep(3)
-    
-    # Press Get started 2 button
-    save_screenshot(driver, "Get_started", timestamp)
-    print("Press Get started 2 button...")    
-    driver.find_element("accessibility id", "Get started").click()
-    #driver.find_element(By.XPATH, "//android.widget.Button[@content-desc='Get started']").click()
-    time.sleep(3)
-    
-    # Press Continue button
-    save_screenshot(driver, "Continue_", timestamp)
-    print("Press File access Continue button...")    
-    driver.find_element("accessibility id", "Continue").click()
-    time.sleep(3)
-
-    # Set Allow files access for app switch
-    save_screenshot(driver, "File_access_", timestamp)
-    print("Checking for File Access switch...")
-
-    try:
-        # 5s wait
-        switch_element = WebDriverWait(driver, 5).until(
-            EC.presence_of_element_located(
-                (AppiumBy.ANDROID_UIAUTOMATOR, 'new UiSelector().resourceId("android:id/switch_widget")')
-            )
-        )
-        print("File Access switch found, toggling...")
-        switch_element.click()
-        time.sleep(2)
-    except TimeoutException:
-        print("File Access switch not found, skipping...")
+    # Sulje sovellus ensin varmistaaksesi alkunäkymä
+    driver.terminate_app("fi.sbweather.app")
+    print("Sovellus suljettu. Avataan uudelleen...")
     time.sleep(2)
     
-# Find Back / Navigate back to scan view - Commented out as OS will set focus back to previous view when toggle moved!
-#    print("Checking for Back button...")
-# 
-#   back_element = None
-#     back_ids = [
-#         "com.android.permissioncontroller:id/navigation_bar_item_icon_view",
-#         "android:id/home",
-#         "com.android.permissioncontroller:id/toolbar"
-#     ]
-# 
-#     for bid in back_ids:
-#         try:
-#             back_element = driver.find_element(By.ID, bid)
-#             print(f"Back button found ({bid}), clicking...")
-#             back_element.click()
-#             time.sleep(2)
-#             break
-#         except NoSuchElementException:
-#             print("except NoSuchElementException - << Back button not found?")
-#             continue
-# 
-#     if back_element is None:
-#         print("Back button not found, need to use hardware back...")
-#         driver.back()
-
-    print("Stop the scan. This can take some time thus 15s wait here...")    
-    driver.find_element("accessibility id", "Stop scan").click()
-    time.sleep(15)
-    
-    #IF tests are passed so far with no issues then setting test_passed=true and take a screenshot.
-    test_passed = True
-    save_screenshot(driver, "Scan_cancelled_all_ok", timestamp)
-
-    # Final view verification: check if some expected txt is visible on the screen. The problem is that UI elements vary randomly in Total App
+    # Avaa sovellus uudelleen
+    driver.activate_app("fi.sbweather.app")
+    print("Open app Main view...")   
+    time.sleep(5)
+    # Main view verification: check if KOTI tab button is visible using accessibility id
     try:
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((
-                By.XPATH, "//*[contains(@text, 'Security reports')]"
+                AppiumBy.ACCESSIBILITY_ID, "KOTI\nTab 1 of 3"
             ))
         )
-        print("Security reports -text found – activation flow confirmed.")
+        print("KOTI-painike löytyi. App is on Main view state confirmed.")
         test_passed = True
-        save_screenshot(driver, "Setup_Protection_view_ok_", timestamp)
+        save_screenshot(driver, "KOTI_painike_main_ok", timestamp)
     except TimeoutException:
-        print("Security reports text NOT found – activation may have failed.")
+        print("KOTI-painiketta ei löytynyt. Something may have failed.")
         test_passed = False
-        save_screenshot(driver, "Setup_Protection_view_fail_", timestamp, failed=True)
+        save_screenshot(driver, "KOTI_painike_main_fail", timestamp, failed=True)
+    
+    # Tap and input Oulu text to field
+    driver.tap([(400, 780)])  
+    time.sleep(3) 
+    driver.execute_script('mobile: shell', {
+        'command': 'input',
+        'args': ['text', 'Oulu'],
+        'includeStderr': True,
+        'timeout': 5000
+    })
+    save_screenshot(driver, "Oulun_saa_asemat_lista", timestamp)
+    
+    # Uusi koodi Accessibility ID:n käytöllä:
+    
+    # Tap and select Oulu Vihreäsaari
+    try:
+        vihreasaari_element = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((AppiumBy.ACCESSIBILITY_ID, "Oulu Vihreäsaari"))
+        )
+        vihreasaari_element.click()
+        print("Oulu Vihreäsaari -elementti löytyi ja klikattiin onnistuneesti.")
+        
+        # Odota että säädata latautuu
+        time.sleep(10)
+        
+        # Tarkista että "LÄMPÖTILA" on näkyvissä
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((AppiumBy.ACCESSIBILITY_ID, "LÄMPÖTILA"))
+            )
+            print("LÄMPÖTILA-elementti löytyi. Säädata on latautunut.")
+            test_passed = True
+            save_screenshot(driver, "Saa_oulu_vihreasaari_ok", timestamp)
+            
+        except TimeoutException:
+            print("LÄMPÖTILA-elementtiä ei löytynyt. Säädatan lataus epäonnistui.")
+            test_passed = False
+            save_screenshot(driver, "Saa_oulu_vihreasaari_fail", timestamp, failed=True)
+            
+    except TimeoutException:
+        print("Oulu Vihreäsaari -elementtiä ei löytynyt aikarajan sisällä.")
+        test_passed = False
+        save_screenshot(driver, "Oulu_vihreasaari_not_found", timestamp, failed=True)
+    
+    # Tap and select Oulu lentoasema
+    try:
+        oulu_element = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((AppiumBy.ACCESSIBILITY_ID, "Oulu lentoasema"))
+        )
+        oulu_element.click()
+        print("Oulu lentoasema -elementti löytyi ja klikattiin onnistuneesti.")
+        
+        # Odota että säädata latautuu
+        time.sleep(10)
+        
+        # Tarkista että "LÄMPÖTILA" on näkyvissä 
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((AppiumBy.ACCESSIBILITY_ID, "LÄMPÖTILA"))
+            )
+            print("LÄMPÖTILA-elementti löytyi. Säädata on latautunut.")
+            test_passed = True
+            save_screenshot(driver, "Saa_oulu_lentoasema_ok", timestamp)
+            
+        except TimeoutException:
+            print("LÄMPÖTILA-elementtiä ei löytynyt. Säädatan lataus epäonnistui.")
+            test_passed = False
+            save_screenshot(driver, "Saa_oulu_lentoasema_fail", timestamp, failed=True)
+            
+    except TimeoutException:
+        print("Oulu lentoasema -elementtiä ei löytynyt aikarajan sisällä.")
+        test_passed = False
+        save_screenshot(driver, "Oulu_lentoasema_not_found", timestamp, failed=True)
+    
+    # Return to Main view - Bad implementation as if prevous click was not working there is needed only one back button to return to Main view!
+    driver.back()
+    time.sleep(3)
+    driver.back()
+    print("Used Android back button x2 to return to the Main view.")
+
+    # Open and check these four views by opening these views using driver.tap these coordinates: (300, 1150), (790, 1150), (300, 1480), (790, 1480)
+    # Take screenshot of each view using save_screenshot function
+    # Use driver.back() function to return to Main view from each view.
+    # Use time.sleep(3) between actions
+    # Check each view, take screenshot about the view if it is visible or not after opening, 
+    # using the following accessibility ids "Lämpimimmät", "Kylmimmät", "Sateisimmat", "Tuulisimmat"
+
+    view_coords = [
+        (300, 1150),
+        (790, 1150),
+        (300, 1480),
+        (790, 1480)
+    ]
+    view_accessibility_ids = [
+        "Lämpimimmät",
+        "Kylmimmät",
+        "Sateisimmat",
+        "Tuulisimmat"
+    ]
+    view_names = [
+        "Max_Temp",
+        "Low_Temp",
+        "Most_Rain",
+        "Most_Windy"
+    ]
+
+    for idx, coords in enumerate(view_coords):
+        print(f"Opening {view_names[idx]} View...")
+        driver.tap([coords])
+        time.sleep(5) # Wait for the view to open. Conten may may miss the view but not that important as we cannot analyze the content.
+        
+        # Tarkista onko näkymä oikeasti avautunut
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((
+                    AppiumBy.ACCESSIBILITY_ID, view_accessibility_ids[idx]
+                ))
+            )
+            print(f"{view_accessibility_ids[idx]} -elementti löytyi. Näkymä avautui onnistuneesti.")
+            screenshot_name = f"{view_names[idx]}_ok"
+            test_passed = True
+            save_screenshot(driver, screenshot_name, timestamp)
+        except TimeoutException:
+            print(f"{view_accessibility_ids[idx]} -elementtiä ei löytynyt. Näkymän avautuminen epäonnistui.")
+            screenshot_name = f"{view_names[idx]}_fail"
+            test_passed = False
+            save_screenshot(driver, screenshot_name, timestamp, failed=True)
+    
+        # Return to Main view    
+        driver.back()
+        print(f"Returned to Main view from {view_names[idx]}.")
+        time.sleep(3)
+
+   # Open ENNÄTYKSET tab and check for widget view
+    try:
+        # Click ENNÄTYKSET tab
+        ennatykset_tab = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((AppiumBy.ACCESSIBILITY_ID, "ENNÄTYKSET\nTab 2 of 3"))
+        )
+        ennatykset_tab.click()
+        print("ENNÄTYKSET-välilehti avattu.")
+        time.sleep(3)
+        
+        # Check if widget view (ImageView) is visible - BAD check here as in widget view there is no accessibility id!
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((AppiumBy.CLASS_NAME, "android.widget.ImageView"))
+            )
+            print("Widget-kuva (ImageView) löytyi ENNÄTYKSET-näkymästä.")
+            save_screenshot(driver, "Ennatykset_widget_ok", timestamp)
+        except TimeoutException:
+            print("Widget-kuvaa (ImageView) ei löytynyt ENNÄTYKSET-näkymästä.")
+            save_screenshot(driver, "Ennatykset_widget_fail", timestamp, failed=True)
+        
+        time.sleep(3)     
+    except TimeoutException:
+        print("ENNÄTYKSET-välilehteä ei löytynyt.")
+        save_screenshot(driver, "Ennatykset_tab_not_found", timestamp, failed=True)
+
+    # Final view verification: check if KOTI tab button is still visible using accessibility id
+    try:
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((
+                AppiumBy.ACCESSIBILITY_ID, "KOTI\nTab 1 of 3"
+            ))
+        )
+        print("KOTI-painike löytyi edelleen. All inportant views confirmed.")
+        test_passed = True
+        save_screenshot(driver, "KOTI_painike_ok", timestamp)
+    except TimeoutException:
+        print("KOTI-painiketta ei löytynyt. Something may have failed.")
+        test_passed = False
+        save_screenshot(driver, "KOTI_painike_fail", timestamp, failed=True)
 
 except Exception as e:
     print(f"Note some test or tests failed: {e}")
@@ -158,5 +251,5 @@ finally:
     # Quit the driver
     driver.quit()
 
-# Exit code for Jenkins (0 = success, 1 = failure)
+# Exit code for test automation results (0 = success, 1 = failure)
 sys.exit(0 if test_passed else 1)
