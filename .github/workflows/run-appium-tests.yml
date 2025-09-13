@@ -42,26 +42,29 @@ jobs:
       - name: Start Appium server and run tests
         shell: powershell
         run: |
-          # Check if port 4723 is free, if not, try to free it
-          try {
-            $tcpConnection = Get-NetTCPConnection -LocalPort 4723 -ErrorAction SilentlyContinue
-            if ($tcpConnection -and $tcpConnection.OwningProcess) {
-              Write-Host "Port 4723 is in use by process $($tcpConnection.OwningProcess). Trying to free it..."
-              Stop-Process -Id $tcpConnection.OwningProcess -Force -ErrorAction SilentlyContinue
-              Start-Sleep -Seconds 2
-            }
-          } catch {
-            Write-Host "Could not free port 4723, but continuing..."
+          # Kill any existing Appium processes
+          Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*appium*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+          Write-Host "Killed existing Appium processes (if any)"
+
+          # Free port 4723 if it's in use
+          $tcpConnection = Get-NetTCPConnection -LocalPort 4723 -ErrorAction SilentlyContinue
+          if ($tcpConnection -and $tcpConnection.OwningProcess) {
+            Stop-Process -Id $tcpConnection.OwningProcess -Force -ErrorAction SilentlyContinue
+            Write-Host "Freed port 4723"
           }
 
-          # Start Appium server in the background
+          # Start Appium server as a background job
           Write-Host "Starting Appium server..."
-          Start-Process -NoNewWindow -FilePath "node" -ArgumentList "$(npm root -g)/appium/build/lib/main.js", "-p", "4723", "--allow-insecure=adb_shell"
-
+          $appiumJob = Start-Job -ScriptBlock {
+            # Korjattu allow-insecure argumentti
+            node "$(npm root -g)/appium/build/lib/main.js" -p 4723 --allow-insecure="*:adb_shell"
+          }
+          
           # Wait for Appium to start
           $timeout = 30
           $counter = 0
           $appiumReady = $false
+          
           while ($counter -lt $timeout) {
             try {
               $response = Invoke-WebRequest -Uri "http://127.0.0.1:4723/status" -UseBasicParsing -TimeoutSec 2
@@ -79,6 +82,8 @@ jobs:
 
           if (-not $appiumReady) {
             Write-Error "Appium failed to start within timeout period"
+            # Try to get logs for debugging
+            Receive-Job $appiumJob -ErrorAction SilentlyContinue
             exit 1
           }
 
@@ -92,15 +97,11 @@ jobs:
           Write-Host "Running all Python tests..."
           python -u Test_features_automation.py $screenshotParam
           $testExitCode = $LASTEXITCODE
-
-          # Stop Appium server (optional)
+          
+          # Stop Appium server
           Write-Host "Stopping Appium server..."
-          try {
-            Get-NetTCPConnection -LocalPort 4723 -ErrorAction SilentlyContinue | ForEach-Object {
-              Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue
-            }
-          } catch {
-            Write-Host "Could not stop Appium server: $($_.Exception.Message)"
-          }
-
+          Stop-Job $appiumJob -ErrorAction SilentlyContinue
+          Remove-Job $appiumJob -Force -ErrorAction SilentlyContinue
+          
+          # Exit with the test result code
           exit $testExitCode
