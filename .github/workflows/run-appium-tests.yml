@@ -1,4 +1,4 @@
-name: Activation-Test
+name: Saa-app-testing
 
 on:
   workflow_dispatch:
@@ -82,11 +82,10 @@ jobs:
             exit 1
           }
 
-          # Run the Python tests
-          Write-Host "Running alll Python tests..."
-          python -u Total_Installation_From_GP_automation.py
-          python -u Total_Activation_automation.py clean
-          python -u Total_Enable_features_automation.py
+          # Run the Python tests - IF like to have all screenshots use 'all' parameter in Test_features_automation
+          Write-Host "Running all Python tests..."
+          python -u Any_app_Installation_From_GP_automation.py
+          python -u Test_features_automation.py
           $testExitCode = $LASTEXITCODE
           
           # Stop Appium server

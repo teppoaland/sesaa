@@ -10,14 +10,17 @@ from selenium.webdriver.support import expected_conditions as EC
 from datetime import datetime
 from appium.webdriver.common.appiumby import AppiumBy
 
-# Read optional start parameter - Optional, not used in this test
-# start_param = sys.argv[1] if len(sys.argv) > 1 else None
-
 # Create timestamp
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+# Read optional start parameter - Optional, not used in this test
+start_param = sys.argv[1] if len(sys.argv) > 1 else None
+
 # Global setting: Save only failed screenshots (True) or all screenshots (False)
-SAVE_ONLY_FAILED_SCREENSHOTS = True  # Muuta Falseksi jos tarvii tallentaa kaikki kuvat
+if start_param == "all":
+    SAVE_ONLY_FAILED_SCREENSHOTS = False
+else:
+    SAVE_ONLY_FAILED_SCREENSHOTS = True  
 
 # Default test result is false if tests not passed
 test_passed = True  # Alustetaan True, muutetaan False jos testi epäonnistuu
