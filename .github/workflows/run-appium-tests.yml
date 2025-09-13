@@ -1,22 +1,11 @@
-name: Saa-app-testing
+name: Weather-Test
 
 on:
   workflow_dispatch:
-    inputs:
-      use_emulator:
-        description: 'Use Android emulator instead of physical device'
-        required: false
-        default: false
-        type: boolean
-      save_all_screenshots:
-        description: 'Save all screenshots (not just failed ones)'
-        required: false
-        default: false
-        type: boolean
 
 jobs:
-  activation-test:
-    runs-on: ${{ github.event.inputs.use_emulator && 'ubuntu-latest' || 'self-hosted' }}
+  weather-test:
+    runs-on: self-hosted
 
     steps:
       - name: Checkout repository
@@ -33,85 +22,76 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install --upgrade Appium-Python-Client
 
-      - name: Setup Emulator (if selected)
-        if: ${{ github.event.inputs.use_emulator }}
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 30
-          arch: x86_64
-          profile: Nexus 6
-          script: echo "Emulator started"
-
       - name: Verify ADB connection
-        shell: bash
+        shell: powershell
         run: |
           adb kill-server
           adb start-server
-          echo "Connected devices:"
+          Write-Host "Connected devices:"
           adb devices
-          
-          if [ "${{ github.event.inputs.use_emulator }}" != "true" ]; then
-            deviceCount=$(adb devices | tail -n +2 | grep "device$" | wc -l)
-            if [ "$deviceCount" -eq 0 ]; then
-              echo "No devices connected"
-              exit 1
-            fi
-          fi
+          $deviceCount = (adb devices | Select-Object -Skip 1 | Where-Object { $_ -match "device$" } | Measure-Object).Count
+          if ($deviceCount -eq 0) {
+            Write-Error "No devices connected"
+            exit 1
+          }
 
       - name: Start Appium server and run tests
-        shell: bash
+        shell: powershell
         run: |
           # Kill any existing Appium processes
-          pkill -f "appium" || true
-          echo "Killed existing Appium processes (if any)"
+          Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*appium*" } | Stop-Process -Force
+          Write-Host "Killed existing Appium processes (if any)"
 
           # Free port 4723 if it's in use
-          fuser -k 4723/tcp || true
-          echo "Freed port 4723"
+          $tcpConnection = Get-NetTCPConnection -LocalPort 4723 -ErrorAction SilentlyContinue
+          if ($tcpConnection -and $tcpConnection.OwningProcess) {
+            Get-Process -Id $tcpConnection.OwningProcess -ErrorAction SilentlyContinue | Stop-Process -Force
+            Write-Host "Freed port 4723"
+          }
 
-          # Start Appium server in background
-          echo "Starting Appium server..."
-          nohup npx appium -p 4723 --allow-insecure=*:adb_shell > appium.log 2>&1 &
-          sleep 10
+          # Start Appium server as a background job
+          Write-Host "Starting Appium server..."
+          $appiumJob = Start-Job -ScriptBlock {
+            node "$(npm root -g)/appium/build/lib/main.js" -p 4723 --allow-insecure=*:adb_shell
+          }
+          
+          # Wait for Appium to start
+          $timeout = 60
+          $counter = 0
+          $appiumReady = $false
+          
+          while ($counter -lt $timeout) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:4723/status" -UseBasicParsing -TimeoutSec 2
+              if ($response.StatusCode -eq 200) {
+                Write-Host "Appium server is ready!"
+                $appiumReady = $true
+                break
+              }
+            } catch {
+              Write-Host "Waiting for Appium to start... ($counter/$timeout)"
+              Start-Sleep -Seconds 2
+              $counter += 2
+            }
+          }
 
-          # Wait for Appium to be ready
-          timeout=60
-          counter=0
-          until curl -s http://127.0.0.1:4723/status | grep -q "200"; do
-            if [ $counter -ge $timeout ]; then
-              echo "Appium failed to start within timeout period"
-              cat appium.log
-              exit 1
-            fi
-            echo "Waiting for Appium to start... ($counter/$timeout)"
-            sleep 2
-            counter=$((counter+2))
-          done
-          echo "Appium server is ready!"
+          if (-not $appiumReady) {
+            Write-Error "Appium failed to start within timeout period"
+            # Try to get logs for debugging
+            Receive-Job $appiumJob -ErrorAction SilentlyContinue
+            exit 1
+          }
 
-          # Determine test parameters
-          screenshotParam=""
-          if [ "${{ github.event.inputs.save_all_screenshots }}" == "true" ]; then
-            screenshotParam="all"
-          fi
-
-          # Run the Python tests
-          echo "Running all Python tests..."
-          python -u Any_app_Installation_From_GP_automation.py $screenshotParam
-          python -u Test_features_automation.py $screenshotParam
-          testExitCode=$?
-
-          # Stop Appium
-          pkill -f "appium" || true
-          echo "Stopped Appium server"
-
+          # Run the Python tests (Weather project)
+          Write-Host "Running all Python tests..."
+          python -u Any_app_Installation_From_GP_automation.py
+          python -u Test_features_automation.py
+          $testExitCode = $LASTEXITCODE
+          
+          # Stop Appium server
+          Write-Host "Stopping Appium server..."
+          Stop-Job $appiumJob -ErrorAction SilentlyContinue
+          Remove-Job $appiumJob -Force -ErrorAction SilentlyContinue
+          
+          # Exit with the test result code
           exit $testExitCode
-
-      - name: Upload test artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-artifacts
-          path: |
-            screenshots/
-            screenshots_failed/
-          if-no-files-found: ignore
