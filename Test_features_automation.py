@@ -200,6 +200,11 @@ try:
     # Final view verification: check if HOME tab button is still visible
     test_element(driver, AppiumBy.ACCESSIBILITY_ID, "KOTI\nTab 1 of 3",
                 "HOME button", "HOME_button_final")
+    
+    # Closing the app - optional
+    print("Test completed. Closing the app...")
+    time.sleep(3)
+    driver.terminate_app("fi.sbweather.app")
 
 except Exception as e:
     print(f"Note: Some test or tests failed: {e}")
