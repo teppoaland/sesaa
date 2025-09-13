@@ -94,7 +94,8 @@ jobs:
           }
 
           # Run the Python tests
-          Write-Host "Running all Python tests..."
+          Write-Host "Running app installation if needed and Python tests..."
+          python -u Any_App_Installation_From_GP_automation.py
           python -u Test_features_automation.py $screenshotParam
           $testExitCode = $LASTEXITCODE
           
