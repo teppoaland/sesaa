@@ -1,34 +1,24 @@
-name: Weather-App-Test
+name: Saa-app-testing
 
 on:
   workflow_dispatch:
-    inputs:
-      save_all_screenshots:
-        description: 'Save all screenshots (not just failed ones)'
-        required: false
-        default: false
-        type: boolean
 
 jobs:
-  weather-test:
+  activation-test:
     runs-on: self-hosted
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Verify Python installation
-        shell: powershell
-        run: |
-          python --version
-          python -m pip --version
+      - name: Use system Python
+        run: python --version
 
       - name: Install Python dependencies
-        shell: powershell
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-          python -m pip install Appium-Python-Client
+          python -m pip install --upgrade Appium-Python-Client
 
       - name: Verify ADB connection
         shell: powershell
@@ -42,13 +32,6 @@ jobs:
             Write-Error "No devices connected"
             exit 1
           }
-
-      - name: Configure Python output encoding
-        shell: powershell
-        run: |
-          # Set UTF-8 encoding for Python output to handle special characters
-          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-          $env:PYTHONIOENCODING = "utf-8"
 
       - name: Start Appium server and run tests
         shell: powershell
@@ -67,7 +50,6 @@ jobs:
           # Start Appium server as a background job
           Write-Host "Starting Appium server..."
           $appiumJob = Start-Job -ScriptBlock {
-            $env:PYTHONIOENCODING = "utf-8"
             node "$(npm root -g)/appium/build/lib/main.js" -p 4723 --allow-insecure=*:adb_shell
           }
           
@@ -93,22 +75,14 @@ jobs:
 
           if (-not $appiumReady) {
             Write-Error "Appium failed to start within timeout period"
+            # Try to get logs for debugging
             Receive-Job $appiumJob -ErrorAction SilentlyContinue
             exit 1
           }
 
-          # Determine test parameters
-          $screenshotParam = ""
-          if ("${{ github.event.inputs.save_all_screenshots }}" -eq "true") {
-            $screenshotParam = "all"
-          }
-
-          # Run the Python tests with UTF-8 encoding
-          $env:PYTHONIOENCODING = "utf-8"
-          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-          
-          Write-Host "Running Weather App tests..."
-          python -u Test_features_automation.py $screenshotParam
+          # Run the Python tests - IF like to have all screenshots use 'all' parameter in Test_features_automation
+          Write-Host "Running all Python tests..."
+          python -u Test_features_automation.py
           $testExitCode = $LASTEXITCODE
           
           # Stop Appium server
@@ -118,12 +92,3 @@ jobs:
           
           # Exit with the test result code
           exit $testExitCode
-
-      - name: Upload test artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: |
-            screenshots/
-            screenshots_failed/
-          if-no-files-found: ignore
