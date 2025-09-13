@@ -2,10 +2,21 @@ name: Saa-app-testing
 
 on:
   workflow_dispatch:
+    inputs:
+      use_emulator:
+        description: 'Use Android emulator instead of physical device'
+        required: false
+        default: false
+        type: boolean
+      save_all_screenshots:
+        description: 'Save all screenshots (not just failed ones)'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   activation-test:
-    runs-on: self-hosted
+    runs-on: ${{ github.event.inputs.use_emulator && 'ubuntu-latest' || 'self-hosted' }}
 
     steps:
       - name: Checkout repository
@@ -22,6 +33,15 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install --upgrade Appium-Python-Client
 
+      - name: Setup Emulator (if selected)
+        if: ${{ github.event.inputs.use_emulator }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: Nexus 6
+          script: echo "Emulator started"
+
       - name: Verify ADB connection
         shell: powershell
         run: |
@@ -29,10 +49,13 @@ jobs:
           adb start-server
           Write-Host "Connected devices:"
           adb devices
-          $deviceCount = (adb devices | Select-Object -Skip 1 | Where-Object { $_ -match "device$" } | Measure-Object).Count
-          if ($deviceCount -eq 0) {
-            Write-Error "No devices connected"
-            exit 1
+          
+          if (${{ !github.event.inputs.use_emulator }}) {
+            $deviceCount = (adb devices | Select-Object -Skip 1 | Where-Object { $_ -match "device$" } | Measure-Object).Count
+            if ($deviceCount -eq 0) {
+              Write-Error "No devices connected"
+              exit 1
+            }
           }
 
       - name: Start Appium server and run tests
@@ -77,15 +100,20 @@ jobs:
 
           if (-not $appiumReady) {
             Write-Error "Appium failed to start within timeout period"
-            # Try to get logs for debugging
             Receive-Job $appiumJob -ErrorAction SilentlyContinue
             exit 1
           }
 
-          # Run the Python tests - IF like to have all screenshots use 'all' parameter in Test_features_automation
+          # Determine test parameters
+          $screenshotParam = ""
+          if (${{ github.event.inputs.save_all_screenshots }}) {
+            $screenshotParam = "all"
+          }
+
+          # Run the Python tests
           Write-Host "Running all Python tests..."
-          python -u Any_app_Installation_From_GP_automation.py
-          python -u Test_features_automation.py
+          python -u Any_app_Installation_From_GP_automation.py $screenshotParam
+          python -u Test_features_automation.py $screenshotParam
           $testExitCode = $LASTEXITCODE
           
           # Stop Appium server
@@ -95,3 +123,12 @@ jobs:
           
           # Exit with the test result code
           exit $testExitCode
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-artifacts
+          path: |
+            screenshots/
+            screenshots_failed/
+          if-no-files-found: ignore
