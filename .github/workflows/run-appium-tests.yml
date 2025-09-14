@@ -10,7 +10,7 @@ on:
         type: boolean
 
 jobs:
-  activation-test:
+  Saa-app-installation-and-tests:
     runs-on: self-hosted
 
     steps:
