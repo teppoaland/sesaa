@@ -116,7 +116,7 @@ try:
     print("Opening app Main view...")   
     time.sleep(5)
     
-    # Main view verification: check if HOME tab button is visible using accessibility id
+    # Main view verification: check if HOME tab button is visible using accessibility id (JIRA-123)
     test_element(driver, AppiumBy.ACCESSIBILITY_ID, "KOTI\nTab 1 of 3", 
                 "HOME button", "HOME_button_main")
     
