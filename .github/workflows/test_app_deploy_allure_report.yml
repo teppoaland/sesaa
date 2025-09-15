@@ -1,12 +1,11 @@
 name: Test app and Deploy Allure Report
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:   # Salli manuaalinen ajo
   push:
     branches-ignore:
-      - "**"   
-  workflow_dispatch:
-
+      - "**"           # Estää ajon pushista
+      
 permissions:
   contents: read
   pages: write
