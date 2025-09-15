@@ -47,7 +47,7 @@ jobs:
 
       - name: Run Appium tests with Allure reporting
         shell: powershell
-        run: pytest --alluredir=allure-results -v -S Test_features_automation_allure.py
+        run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
 
       - name: Generate Allure report with historical data
         if: always()
