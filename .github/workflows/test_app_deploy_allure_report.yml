@@ -1,4 +1,4 @@
-name: Test app and Deploy Allure Report
+name: Test App and Deploy Allure Report
 
 on:
   push:
@@ -14,8 +14,7 @@ jobs:
   test-and-generate-report:
     name: Run tests and generate Allure report
     runs-on: self-hosted
-    # Lisätty continue-on-error, jotta seuraava työ voi edetä vaikka testit failaisivat
-    continue-on-error: true
+    continue-on-error: true  # workflow jatkaa vaikka testit epäonnistuisivat
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -30,8 +29,12 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
-      - name: Create allure-history directory
-        run: mkdir -p allure-history
+      - name: Create allure-history directory if missing
+        shell: powershell
+        run: |
+          if (-not (Test-Path -Path allure-history)) {
+              New-Item -ItemType Directory -Path allure-history
+          }
 
       - name: Try to download previous allure history
         uses: actions/download-artifact@v4
@@ -42,18 +45,26 @@ jobs:
 
       - name: Run Appium tests with Allure reporting
         run: pytest --alluredir=allure-results Test_features_automation_allure.py
+        continue-on-error: true  # jatketaan vaikka testit failaa
 
       - name: Generate Allure report with historical data
-        # Suoritetaan aina, vaikka testit epäonnistuisivat
         if: always()
+        shell: powershell
         run: |
           npm install -g allure-commandline
-          mkdir -p allure-history
-          cp -r allure-results/* allure-history/
+
+          # Luo historiallinen kansio jos ei ole olemassa
+          if (-not (Test-Path -Path allure-history)) {
+              New-Item -ItemType Directory -Path allure-history
+          }
+
+          # Kopioi testitulokset historialle
+          Copy-Item -Path "allure-results\*" -Destination "allure-history" -Recurse -Force
+
+          # Generoi HTML-raportti historian kanssa
           allure generate allure-history --clean -o allure-report
 
       - name: Preserve test history for future runs
-        # Suoritetaan aina, vaikka testit epäonnistuisivat
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -62,7 +73,6 @@ jobs:
           retention-days: 30
 
       - name: Prepare Allure report for deployment
-        # Suoritetaan aina, vaikka testit epäonnistuisivat
         if: always()
         uses: actions/upload-pages-artifact@v3
         with:
@@ -72,7 +82,6 @@ jobs:
     name: Deploy Allure report to GitHub Pages
     runs-on: ubuntu-latest
     needs: test-and-generate-report
-    # Suoritetaan aina, vaikka edellinen työ epäonnistui
     if: always()
     environment:
       name: github-pages
