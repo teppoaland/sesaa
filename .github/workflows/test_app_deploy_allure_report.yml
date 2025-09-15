@@ -3,8 +3,8 @@ name: Test app and Deploy Allure Report
 on:
   workflow_dispatch:
   push:
-    branches-ignore: # Seuraavalla arvolla "branches: [main]" ajaa kaikista kommiteista tstit"
-      - "**"   # ei aja mistään pushista
+    branches-ignore:
+      - "**"   
   workflow_dispatch:
 
 permissions:
