@@ -1,4 +1,4 @@
-name: Saa-app-testing with Allure reports
+name: OLD Saa-app-testing with Allure reports
 
 on:
   workflow_dispatch:
