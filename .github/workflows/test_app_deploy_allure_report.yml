@@ -13,19 +13,19 @@ permissions:
 jobs:
   test-and-generate-report:
     name: Run tests and generate Allure report
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+      - name: Use system Python
+        run: python --version
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
       - name: Setup allure history directory
