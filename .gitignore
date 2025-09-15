@@ -11,3 +11,5 @@ tmp/
 *.bak
 .vscode/settings.json
 .vscode/launch.json
+allure-report/
+allure-results/
