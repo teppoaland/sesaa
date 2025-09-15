@@ -18,7 +18,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Required for history preservation
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,11 +30,16 @@ jobs:
           pip install -r requirements.txt
           pip install allure-pytest
 
-      - name: Download previous allure history
+      - name: Download previous allure history (if exists)
         uses: actions/download-artifact@v4
         with:
           name: allure-history
           path: allure-history
+        continue-on-error: true  # Tärkeä: ei epäonnistu vaikka artefaktia ei olisi
+
+      - name: Create history directory if missing
+        run: mkdir -p allure-history
+        if: always()  # Suoritetaan aina, edellinen askel voi epäonnistua
 
       - name: Run Appium tests with Allure reporting
         run: pytest --alluredir=allure-results Test_features_automation_allure.py
@@ -42,10 +47,10 @@ jobs:
       - name: Generate Allure report with historical data
         run: |
           npm install -g allure-commandline
-          # Merge new results with history
+          # Kopioi uudet tulokset historiaan
           mkdir -p allure-history
           cp -r allure-results/* allure-history/
-          # Generate comprehensive report from all historical data
+          # Generoi raportti koko historiasta
           allure generate allure-history --clean -o allure-report
 
       - name: Preserve test history for future runs
