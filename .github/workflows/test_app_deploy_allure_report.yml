@@ -1,11 +1,11 @@
-name: Test app and Deploy Allure Report
+name: Test app and Deploy Allure Report with History
 
 on:
-  workflow_dispatch:   # Salli manuaalinen ajo
+  workflow_dispatch:  # Salli manuaalinen ajo
   push:
     branches-ignore:
       - "**"           # Estää ajon pushista
-      
+
 permissions:
   contents: read
   pages: write
@@ -30,14 +30,34 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
+      - name: Create allure-history directory
+        run: mkdir -p allure-history
+
+      - name: Try to download previous allure history
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-history
+          path: allure-history
+        continue-on-error: true
+
       - name: Run Appium tests with Allure reporting
         run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
 
-      - name: Generate Allure report
+      - name: Generate Allure report with history
         if: always()
         run: |
           npm install -g allure-commandline
-          allure generate allure-results --clean -o allure-report
+          # Copy new results into history so Allure sees it
+          cp -r allure-results/* allure-history/
+          allure generate allure-history --clean -o allure-report
+
+      - name: Preserve test history for future runs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-history
+          path: allure-history/
+          retention-days: 30
 
       - name: Upload Allure report artifact
         if: always()

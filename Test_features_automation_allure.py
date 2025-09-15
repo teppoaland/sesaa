@@ -16,8 +16,8 @@ from appium.webdriver.common.appiumby import AppiumBy
 # Create timestamp
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-# Set to False if need to have screenshots from all tested views - Not working properly. IF taken to use need more tweaking.
-SAVE_ONLY_FAILED_SCREENSHOTS = False
+# Set to False if need to have screenshots from all tested views 
+SAVE_ONLY_FAILED_SCREENSHOTS = True
 
 # Pytest fixture for setup and teardown
 @pytest.fixture(scope="function")
@@ -45,7 +45,11 @@ def app_setup(driver):
     yield
 
 def save_screenshot(driver, filename_prefix, failed=False):
-    """Save screenshot based on settings."""
+    """
+    Save screenshot based on settings.
+    - Always save failed screenshots.
+    - Save successful screenshots only if SAVE_ONLY_FAILED_SCREENSHOTS is False.
+    """
     if failed or not SAVE_ONLY_FAILED_SCREENSHOTS:
         allure.attach(
             driver.get_screenshot_as_png(),
