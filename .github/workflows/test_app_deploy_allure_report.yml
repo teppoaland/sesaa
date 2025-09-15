@@ -31,7 +31,7 @@ jobs:
 
       - name: Run App installation check
         run: python -u Any_App_Installation_From_GP_automation.py
-        continue-on-error: true  # vaikka epäonnistuisi, jatketaan
+        continue-on-error: true
         shell: powershell
 
       - name: Create allure-history directory if missing
@@ -46,7 +46,7 @@ jobs:
         with:
           name: allure-history
           path: allure-history
-        continue-on-error: true
+        continue-on-error: true  # jatketaan vaikka artefakti puuttuisi
 
       - name: Run Appium tests with Allure reporting
         run: pytest -s -v --alluredir=allure-results Test_features_automation_allure.py
@@ -84,8 +84,8 @@ jobs:
         if: always()
         uses: actions/upload-pages-artifact@v4
         with:
+          name: allure-report
           path: allure-report.zip
-          artifact-name: allure-report
 
   deploy-to-github-pages:
     name: Deploy Allure report to GitHub Pages
