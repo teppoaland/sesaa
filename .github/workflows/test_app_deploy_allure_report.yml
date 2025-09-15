@@ -13,7 +13,7 @@ permissions:
 jobs:
   test-and-generate-report:
     name: Run tests and generate Allure report
-    runs-on: self-hosted
+    runs-on: self-hosted  # Käytetään paikallista runneria
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -28,24 +28,22 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
-      - name: Setup allure history directory
-        run: |
-          # Luo historia-hakemisto (tyhjä ensimmäisellä kerralla)
-          mkdir -p allure-history
-          echo "Setting up allure history directory"
+      - name: Create allure-history directory
+        run: mkdir -p allure-history
 
       - name: Try to download previous allure history
         uses: actions/download-artifact@v4
         with:
           name: allure-history
           path: allure-history
-        continue-on-error: true  # Ei epäonnistu vaikka artefaktia ei olisi
+        continue-on-error: true  # Ei kaadu vaikka artefaktia ei löydy
 
       - name: Run Appium tests with Allure reporting
         run: pytest --alluredir=allure-results Test_features_automation_allure.py
 
       - name: Generate Allure report with historical data
         run: |
+          # Asenna allure-commandline
           npm install -g allure-commandline
           # Kopioi uudet tulokset historiaan
           mkdir -p allure-history
@@ -67,7 +65,7 @@ jobs:
 
   deploy-to-github-pages:
     name: Deploy Allure report to GitHub Pages
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Deploy voidaan tehdä GitHubin runnerissa
     needs: test-and-generate-report
     environment:
       name: github-pages
