@@ -40,19 +40,19 @@ flowchart TD
     subgraph SelfHostedRunner [Self-Hosted Runner PC WIN10]
         SH[Actions Runner<br/>Windows]
         
-        subgraph Testaus-ympäristö
+        subgraph TestausYmpäristö
             AS[Appium Server<br/>Port 4723]
             NJS[Node.js Runtime]
         end
 
-        subgraph Buildi-ympäristö
+        subgraph BuildiYmpäristö
             PY[Python 3.9+]
             PK[Python Kirjastot<br/>appium-python-client<br/>pytest<br/>allure-pytest]
             ADB[Android Debug Bridge<br/>adb server]
         end
     end
 
-    subgraph Android-laite [Android Laite/Emulaattori - suositus fyysinen laite]
+    subgraph AndroidLaite [Android Laite/Emulaattori - suositus fyysinen laite]
         AOS[Android OS]
         SA[Sää-sovellus<br/>fi.sbweather.app]
         ADBD[ADB Daemon]
