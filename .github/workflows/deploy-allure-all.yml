@@ -1,10 +1,8 @@
 name: Deploy Pages (Repo & Allure)
 
 on:
-  workflow_dispatch:
   push:
-    branches-ignore: # Seuraavalla arvolla "branches: [main]" ajaa kaikista kommiteista tstit"
-      - "**"   # ei aja mistään pushista
+    branches: [main]
   workflow_dispatch:
   workflow_run:
     workflows: ["Saa-app-testing with Allure reports"]
