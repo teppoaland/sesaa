@@ -37,22 +37,22 @@ flowchart TD
         GP[GitHub Pages<br/>Raporttien jakaminen]
     end
 
-    subgraph SelfHostedRunner [Self-Hosted Runner PC WIN10]
-        SH[Actions Runner<br/>Ubuntu/Windows]
+    subgraph SelfHostedRunner [Self-Hosted Runner PC (WIN10)]
+        SH[Actions Runner<br/>Windows]
         
-        subgraph TestausYmpäristö
+        subgraph Testaus-ympäristö
             AS[Appium Server<br/>Port 4723]
             NJS[Node.js Runtime]
         end
 
-        subgraph BuildYmpäristö
+        subgraph Buildi-ympäristö
             PY[Python 3.9+]
             PK[Python Kirjastot<br/>appium-python-client<br/>pytest<br/>allure-pytest]
             ADB[Android Debug Bridge<br/>adb server]
         end
     end
 
-    subgraph AndroidLaite [Android Laite/Emulaattori]
+    subgraph Android-laite [Android Laite/Emulaattori - suositus fyysinen laite]
         AOS[Android OS]
         SA[Sää-sovellus<br/>fi.sbweather.app]
         ADBD[ADB Daemon]
@@ -62,8 +62,8 @@ flowchart TD
     GHA -- Ajaa testit --> SelfHostedRunner
     SelfHostedRunner -- Hakee koodin --> GHR
     
-    SH -- Hallitsee --> TestausYmpäristö
-    SH -- Hallitsee --> BuildYmpäristö
+    SH -- Hallitsee --> Testaus-ympäristö
+    SH -- Hallitsee --> Build-ympäristö
     
     AS -- Kommunikoi --> ADB
     ADB -- USB/WiFi-yhteys --> ADBD
