@@ -102,4 +102,16 @@ jobs:
           $testExitCode = $LASTEXITCODE
 
           # Stop Appium server only if job exists
-          if ($appiumJob)
+          if ($appiumJob) {
+              Stop-Job $appiumJob -ErrorAction SilentlyContinue
+              Remove-Job $appiumJob -Force -ErrorAction SilentlyContinue
+          }
+
+          exit $testExitCode
+
+      # 8️⃣ Upload results artifact
+      - name: Upload Robot Framework results
+        uses: actions/upload-artifact@v4
+        with:
+          name: rf-results
+          path: results/
