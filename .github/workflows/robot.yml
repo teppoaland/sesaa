@@ -25,7 +25,7 @@ jobs:
           Write-Host "Current directory:"
           pwd
           Write-Host "Files in directory:"
-          ls -la
+          Get-ChildItem -Force
 
       # 3️⃣ Näytä Python-versio
       - name: Use system Python
@@ -47,4 +47,59 @@ jobs:
           Write-Host "Connected devices:"
           adb devices
           $deviceCount = (adb devices | Select-Object -Skip 1 | Where-Object { $_ -match "device$" } | Measure-Object).Count
-          if ($deviceCount -eq
+          if ($deviceCount -eq 0) {
+            Write-Error "No devices connected"
+            exit 1
+          }
+
+      # 6️⃣ Käynnistä Appium-serveri taustalle
+      - name: Start Appium server
+        shell: powershell
+        run: |
+          # Kill any existing Appium processes
+          Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*appium*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+
+          # Start Appium server as a background job
+          $appiumJob = Start-Job -ScriptBlock {
+            node "$(npm root -g)/appium/build/lib/main.js" -p 4723 --allow-insecure="*:adb_shell"
+          }
+
+          # Wait for Appium to start
+          $timeout = 60
+          $counter = 0
+          $appiumReady = $false
+          while ($counter -lt $timeout) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:4723/status" -UseBasicParsing -TimeoutSec 2
+              if ($response.StatusCode -eq 200) {
+                Write-Host "Appium server is ready!"
+                $appiumReady = $true
+                break
+              }
+            } catch {
+              Start-Sleep -Seconds 2
+              $counter += 2
+            }
+          }
+
+          if (-not $appiumReady) {
+            Write-Error "Appium failed to start within timeout period"
+            exit 1
+          }
+
+      # 7️⃣ Aja Robot Framework -testit
+      - name: Run Robot Framework tests
+        shell: powershell
+        run: |
+          $robotFile = Join-Path $env:GITHUB_WORKSPACE "wheater_app_tests.robot"
+          if (-not (Test-Path $robotFile)) {
+              Write-Error "Robot Framework test file not found: $robotFile"
+              exit 1
+          }
+
+          # Run tests
+          robot -d results $robotFile
+          $testExitCode = $LASTEXITCODE
+
+          # Stop Appium server only if job exists
+          if ($appiumJob)
