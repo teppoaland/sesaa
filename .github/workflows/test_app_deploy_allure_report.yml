@@ -32,42 +32,48 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
-      # 1. Luo tarvittavat hakemistot
-      - name: Create directories
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Path "./allure-results/history" -Force
-          Write-Host "Directories created"
+      # 1. Aja testit ensin
+      - name: Run Appium tests with Allure reporting
+        run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
 
-      # 2. Lataa edellinen historia (jos on olemassa)
+      # 2. Lataa vanha historia GitHubista
       - name: Download previous allure history
         uses: actions/download-artifact@v4
         with:
           name: allure-history
-          path: ./allure-results/history
+          path: ./history
         continue-on-error: true
 
-      # 3. Aja testit
-      - name: Run Appium tests with Allure reporting
-        run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
+      # 3. Kopioi vanha historia uusiin results-kansioihin
+      - name: Restore history into allure-results
+        if: always()
+        shell: pwsh
+        run: |
+          if (!(Test-Path "allure-results/history")) {
+              New-Item -ItemType Directory -Path allure-results/history | Out-Null
+          }
+          if (Test-Path "history") {
+              Copy-Item -Path .\history\* -Destination allure-results/history -Recurse -Force
+          }
 
-      # 4. Generoi Allure-raportti
+      # 4. Generoi raportti (yhdistää historian)
       - name: Generate Allure report
         if: always()
+        shell: pwsh
         run: |
           npm install -g allure-commandline
           allure generate allure-results --clean -o allure-report
 
-      # 5. Tallenna uusi historia artifactiksi
+      # 5. Tallenna uusi historia GitHub-artifactiksi
       - name: Upload history artifact for next run
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: allure-history
-          path: ./allure-results/history/
+          path: allure-report/history/
           retention-days: 30
-          if-no-files-found: warn
 
+      # 6. Uploadaa raportti artifactiksi
       - name: Upload Allure report artifact
         if: always()
         uses: actions/upload-artifact@v4
