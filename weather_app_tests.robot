@@ -19,8 +19,8 @@ Open Weather App
     ...    appPackage=fi.sbweather.app
     ...    appActivity=fi.sbweather.app.MainActivity
     ...    automationName=UiAutomator2
-    ...    noReset=true
-    ...    fullReset=false
+    ...    noReset=${True}
+    ...    fullReset=${False}
     
     Open Application    ${APPIUM_SERVER}    ${options}
     Set Appium Timeout    30 seconds
