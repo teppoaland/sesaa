@@ -25,12 +25,12 @@ jobs:
           Write-Host "GitHub Workspace: $env:GITHUB_WORKSPACE"
           Write-Host "Current directory:"
           pwd
-          Write-Host "Python version:"
+          Write-Host "Python version:" 
           python --version
           Write-Host "Node.js version:"
           node --version
 
-      # 3️⃣ Asenna riippuvuudet
+      # 3️⃣ Asenna Python-riippuvuudet
       - name: Install Python dependencies
         shell: powershell
         run: |
@@ -53,66 +53,25 @@ jobs:
             exit 1
           }
 
-      # 5️⃣ Käynnistä Appium-serveri
-      - name: Start Appium server
-        shell: powershell
-        run: |
-          # Tapa olemassa olevat Appium-prosessit
-          Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -eq "node" -and $_.CommandLine -like "*appium*" } | Stop-Process -Force -ErrorAction SilentlyContinue
-          
-          # Vapauta portti 4723 tarvittaessa
-          $tcpConnection = Get-NetTCPConnection -LocalPort 4723 -ErrorAction SilentlyContinue
-          if ($tcpConnection -and $tcpConnection.OwningProcess) {
-            Stop-Process -Id $tcpConnection.OwningProcess -Force -ErrorAction SilentlyContinue
-            Write-Host "Freed port 4723"
-          }
-          
-          # Käynnistä Appium taustalle
-          Write-Host "Starting Appium server..."
-          Start-Process -NoNewWindow -FilePath "node" -ArgumentList "$(npm root -g)/appium/build/lib/main.js", "-p", "4723", "--allow-insecure=*:adb_shell"
-          
-          # Odota että Appium käynnistyy
-          $timeout = 30
-          $counter = 0
-          $appiumReady = $false
-          
-          while ($counter -lt $timeout) {
-            try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:4723/status" -UseBasicParsing -TimeoutSec 2
-              if ($response.StatusCode -eq 200) {
-                Write-Host "Appium server is ready!"
-                $appiumReady = $true
-                break
-              }
-            } catch {
-              Write-Host "Waiting for Appium to start... ($counter/$timeout)"
-              Start-Sleep -Seconds 2
-              $counter += 2
-            }
-          }
-          
-          if (-not $appiumReady) {
-            Write-Error "Appium failed to start within timeout period"
-            exit 1
-          }
-
-      # 6️⃣ Aja Robot Framework -testit
+      # 5️⃣ Aja Robot Framework testit
       - name: Run Robot Framework tests
         shell: powershell
         run: |
           Write-Host "Running Robot Framework tests..."
+          $screenshotParam = ""
+          if ("${{ github.event.inputs.save_all_screenshots }}" -eq "true") {
+            $screenshotParam = "all"
+          }
           robot --outputdir robot-reports --log robot-log.html --report robot-report.html --xunit robot-xunit.xml weather_app_tests.robot
           
-          # Tarkista exit code ja näytä raportin sijainti
           if ($LASTEXITCODE -eq 0) {
             Write-Host "✅ Tests passed successfully!"
           } else {
             Write-Host "❌ Tests failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
           }
-          
-          Write-Host "Reports generated in: $pwd/robot-reports"
 
-      # 7️⃣ Lataa raportit artefaktana
+      # 6️⃣ Lataa raportit artefaktina
       - name: Upload test reports
         uses: actions/upload-artifact@v4
         with:
@@ -123,12 +82,3 @@ jobs:
             robot-report.html
             robot-xunit.xml
           retention-days: 7
-
-      # 8️⃣ Lopeta Appium-serveri
-      - name: Stop Appium server
-        if: always()
-        shell: powershell
-        run: |
-          Write-Host "Stopping Appium server..."
-          Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -eq "node" -and $_.CommandLine -like "*appium*" } | Stop-Process -Force -ErrorAction SilentlyContinue
-          Write-Host "Appium server stopped"
