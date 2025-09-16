@@ -10,24 +10,19 @@ Suite Teardown   Close Application
 
 *** Variables ***
 ${APPIUM_SERVER}    http://127.0.0.1:4723
-${DEVICE_NAME}      Android_test_device
-${APP_PACKAGE}      fi.sbweather.app
-${APP_ACTIVITY}     fi.sbweather.app.MainActivity
-${AUTOMATION_NAME}  UiAutomator2
-${NO_RESET}         True
-${FULL_RESET}       False
 
 *** Keywords ***
 Open Weather App
-    Open Application
-    ...    ${APPIUM_SERVER}
+    ${options}=    Create Dictionary
     ...    platformName=Android
-    ...    deviceName=${DEVICE_NAME}
-    ...    appPackage=${APP_PACKAGE}
-    ...    appActivity=${APP_ACTIVITY}
-    ...    automationName=${AUTOMATION_NAME}
-    ...    noReset=${NO_RESET}
-    ...    fullReset=${FULL_RESET}
+    ...    deviceName=Android_test_device
+    ...    appPackage=fi.sbweather.app
+    ...    appActivity=fi.sbweather.app.MainActivity
+    ...    automationName=UiAutomator2
+    ...    noReset=true
+    ...    fullReset=false
+    
+    Open Application    ${APPIUM_SERVER}    ${options}
     Set Appium Timeout    30 seconds
 
 Tap Coordinates
