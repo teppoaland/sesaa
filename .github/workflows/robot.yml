@@ -45,4 +45,26 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip inst
+          python -m pip install -r requirements.txt
+          python -m pip install --upgrade Appium-Python-Client robotframework robotframework-appiumlibrary
+
+      # 6️⃣ Varmista ADB-laite
+      - name: Verify ADB connection
+        shell: powershell
+        run: |
+          adb kill-server
+          adb start-server
+          Write-Host "Connected devices:"
+          adb devices
+          $deviceCount = (adb devices | Select-Object -Skip 1 | Where-Object { $_ -match "device$" } | Measure-Object).Count
+          if ($deviceCount -eq 0) {
+            Write-Error "No devices connected"
+            exit 1
+          }
+
+      # 7️⃣ Käynnistä Appium-serveri taustalle
+      - name: Start Appium server
+        shell: powershell
+        run: |
+          # Kill any existing Appium processes
+          Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -_
