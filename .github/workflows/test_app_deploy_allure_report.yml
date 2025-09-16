@@ -32,11 +32,15 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
+      - name: Create directories for Allure
+        run: |
+          mkdir -p allure-results/history
+
       - name: Download previous allure history
         uses: actions/download-artifact@v4
         with:
           name: allure-history
-          path: ./allure-results/history
+          path: allure-results/history
         continue-on-error: true
 
       - name: Run Appium tests with Allure reporting
@@ -48,25 +52,12 @@ jobs:
           npm install -g allure-commandline
           allure generate allure-results --clean -o allure-report
 
-      - name: Copy history to persistent storage
-        shell: powershell
-        run: |
-          # Kopioi historia pysyvään sijaintiin (yksi taso ylempänä)
-          if (Test-Path -Path "./allure-report/history" -PathType Container) {
-              $parentPath = Split-Path -Path $PWD -Parent
-              $persistentHistoryPath = Join-Path $parentPath "allure-history"
-              
-              New-Item -ItemType Directory -Path $persistentHistoryPath -Force
-              Copy-Item -Path "./allure-report/history/*" -Destination $persistentHistoryPath -Recurse -Force
-              Write-Host "History copied to persistent location: $persistentHistoryPath"
-          }
-
       - name: Upload history artifact for next run
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: allure-history
-          path: ../allure-history/
+          path: allure-results/history/
           retention-days: 30
 
       - name: Upload Allure report artifact
