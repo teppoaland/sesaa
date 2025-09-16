@@ -1,104 +1,225 @@
-*** Settings ***
-Library           AppiumLibrary
-Library           Collections
-Library           OperatingSystem
-Library           String
-Library           BuiltIn
+import time
+import os
+import sys
+from appium import webdriver
+from appium.options.android import UiAutomator2Options
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from datetime import datetime
+from appium.webdriver.common.appiumby import AppiumBy
 
-Suite Setup       Open Weather App
-Suite Teardown    Close Application
+# Create timestamp
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-*** Variables ***
-${APPIUM_SERVER}    http://127.0.0.1:4723
-${DEVICE_NAME}      Android_test_device
-${APP_PACKAGE}      fi.sbweather.app
-${APP_ACTIVITY}     fi.sbweather.app.MainActivity
-${AUTOMATION_NAME}  UiAutomator2
-${SAVE_FAILED_ONLY}  True
-${TIMESTAMP}        ${EMPTY}
+# Read optional start parameter - Optional, not used in this test
+start_param = sys.argv[1] if len(sys.argv) > 1 else None
 
-*** Keywords ***
-Open Weather App
-    # Luodaan timestamp screenshotteja varten
-    ${TIMESTAMP}=    Get Time    result_format=%Y%m%d_%H%M%S
+# Global setting: Save only failed screenshots (True) or all screenshots (False)
+if start_param == "all":
+    SAVE_ONLY_FAILED_SCREENSHOTS = False
+else:
+    SAVE_ONLY_FAILED_SCREENSHOTS = True  
+
+# Default test result is false if tests not passed
+test_passed = True  # Initialize as True, set to False if any test fails
+
+options = UiAutomator2Options()
+options.platform_name = "Android"
+options.device_name = "Android_test_device"  
+options.app_package = "fi.sbweather.app"
+options.app_activity = "fi.sbweather.app.MainActivity"
+options.automation_name = "UiAutomator2"
+# Prevent app reset as this test is ran after installation test - optional in this case
+options.no_reset = True
+options.full_reset = False
+
+driver = webdriver.Remote("http://127.0.0.1:4723", options=options)
+
+def save_screenshot(driver, filename_prefix, timestamp, failed=False):
+    """Save screenshot based on settings."""
+    if failed or not SAVE_ONLY_FAILED_SCREENSHOTS:
+        dirname = "screenshots_failed" if failed else "screenshots"
+        os.makedirs(dirname, exist_ok=True)
+        filename = f"{filename_prefix}_{timestamp}.png"
+        filepath = os.path.join(dirname, filename)
+        driver.save_screenshot(filepath)
+        print(f"Screenshot saved: {filepath}")
+        return filepath
+    return None
+
+def check_element(driver, by, value, timeout=10):
+    """Check if element exists and return True/False."""
+    try:
+        WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((by, value))
+        )
+        return True
+    except TimeoutException:
+        return False
+
+def test_element(driver, by, value, element_name, screenshot_prefix, timeout=10):
+    """Test element existence, save screenshot and update test_passed variable."""
+    global test_passed
+    if check_element(driver, by, value, timeout):
+        print(f"{element_name} found.")
+        save_screenshot(driver, f"{screenshot_prefix}_ok", timestamp, failed=False)
+        return True
+    else:
+        print(f"{element_name} not found.")
+        save_screenshot(driver, f"{screenshot_prefix}_fail", timestamp, failed=True)
+        test_passed = False
+        return False
+
+def tap_and_test_location(driver, accessibility_id, location_name, screenshot_prefix):
+    """Tap location and test if temperature is visible. Save screenshot for success/failure."""
+    global test_passed
+    try:
+        element = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((AppiumBy.ACCESSIBILITY_ID, accessibility_id))
+        )
+        element.click()
+        print(f"{location_name} - element found and clicked successfully.")
+        
+        # Wait for weather data to load
+        time.sleep(10)
+        
+        # Check if "LÄMPÖTILA" is visible (NOTE: This is the actual element ID in the app)
+        if check_element(driver, AppiumBy.ACCESSIBILITY_ID, "LÄMPÖTILA", 10):
+            print("Temperature element found. Weather data loaded successfully.")
+            save_screenshot(driver, f"{screenshot_prefix}_ok", timestamp, failed=False)
+            return True
+        else:
+            print("Temperature element not found. Weather data loading failed.")
+            save_screenshot(driver, f"{screenshot_prefix}_fail", timestamp, failed=True)
+            test_passed = False
+            return False
+            
+    except TimeoutException:
+        print(f"{location_name} - element not found within timeout period.")
+        save_screenshot(driver, f"{location_name}_not_found", timestamp, failed=True)
+        test_passed = False
+        return False
+
+print("\nTest_features_automation.py - Automation test starting...")
+time.sleep(2)
+
+try:
+    # Close app first to ensure initial view
+    driver.terminate_app("fi.sbweather.app")
+    print("App closed. Reopening...")
+    time.sleep(2)
     
-    ${options}=    Create Dictionary
-    ...    platformName=Android
-    ...    deviceName=${DEVICE_NAME}
-    ...    appPackage=${APP_PACKAGE}
-    ...    appActivity=${APP_ACTIVITY}
-    ...    automationName=${AUTOMATION_NAME}
-    ...    noReset=True
-    ...    fullReset=False
+    # Reopen the app
+    driver.activate_app("fi.sbweather.app")
+    print("Opening app Main view...")   
+    time.sleep(5)
+    
+    # Main view verification: check if HOME tab button is visible using accessibility id (JIRA-123)
+    test_element(driver, AppiumBy.ACCESSIBILITY_ID, "KOTI\nTab 1 of 3", 
+                "HOME button", "HOME_button_main")
+    
+    # Tap and input Oulu text to field
+    driver.tap([(400, 780)])  
+    time.sleep(3) 
+    driver.execute_script('mobile: shell', {
+        'command': 'input',
+        'args': ['text', 'Oulu'],
+        'includeStderr': True,
+        'timeout': 5000
+    })
+    save_screenshot(driver, "Oulu_weather_stations_list", timestamp, failed=False)
+    
+    # Test Oulu Vihreäsaari
+    tap_and_test_location(driver, "Oulu Vihreäsaari", "Oulu Vihreäsaari", "Weather_oulu_vihreasaari")
+    
+    # Test Oulu lentoasema
+    tap_and_test_location(driver, "Oulu lentoasema", "Oulu lentoasema", "Weather_oulu_airport")
+    
+    # Return to Main view
+    driver.back()
+    time.sleep(3)
+    driver.back()
+    print("Used Android back button x2 to return to the Main view.")
 
-    Open Application    ${APPIUM_SERVER}    desired_capabilities=${options}    timeout=30s
+    # Check each view "Lämpimimmät", "Kylmimmät", "Sateisimmat", "Tuulisimmat"
+    view_coords = [
+        (300, 1150),
+        (790, 1150),
+        (300, 1480),
+        (790, 1480)
+    ]
+    view_accessibility_ids = [
+        "Lämpimimmät",
+        "Kylmimmät",
+        "Sateisimmat",
+        "Tuulisimmat"
+    ]
+    view_names = [
+        "Max_Temp",
+        "Low_Temp",
+        "Most_Rain",
+        "Most_Windy"
+    ]
 
-Tap Coordinates
-    [Arguments]    ${x}    ${y}
-    Tap With Positions    100    ${x}    ${y}
+    for idx, coords in enumerate(view_coords):
+        print(f"Opening {view_names[idx]} View...")
+        driver.tap([coords])
+        time.sleep(6)
+        
+        # Check if the view actually opened
+        test_element(driver, AppiumBy.ACCESSIBILITY_ID, view_accessibility_ids[idx],
+                    f"{view_accessibility_ids[idx]} element", view_names[idx])
+        
+        # Return to Main view    
+        driver.back()
+        print(f"Returned to Main view from {view_names[idx]}.")
+        time.sleep(3)
 
-Input Text Via ADB
-    [Arguments]    ${text}
-    Execute Script    mobile: shell    { "command": "input", "args": ["text", "${text}"], "includeStderr": true, "timeout": 5000 }
+    # Open RECORDS tab and check for widget view
+    try:
+        # Click RECORDS tab
+        records_tab = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((AppiumBy.ACCESSIBILITY_ID, "ENNÄTYKSET\nTab 2 of 3"))
+        )
+        records_tab.click()
+        print("RECORDS tab opened.")
+        time.sleep(3)
+        
+        # Check if widget view (ImageView) is visible
+        test_element(driver, AppiumBy.CLASS_NAME, "android.widget.ImageView",
+                    "Widget image (ImageView)", "Records_widget")
+        
+        time.sleep(3)     
+    except TimeoutException:
+        print("RECORDS tab not found.")
+        save_screenshot(driver, "Records_tab_not_found", timestamp, failed=True)
+        test_passed = False
 
-Save Screenshot
-    [Arguments]    ${filename}    ${failed}=False
-    ${save}=    Run Keyword If    '${failed}'=='True' or '${SAVE_FAILED_ONLY}'=='False'    Capture Page Screenshot    ${filename}_${TIMESTAMP}.png
-    [Return]    ${save}
+    # Final view verification: check if HOME tab button is still visible
+    test_element(driver, AppiumBy.ACCESSIBILITY_ID, "KOTI\nTab 1 of 3",
+                "HOME button", "HOME_button_final")
+    
+    # Closing the app - optional
+    print("Test completed. Closing the app...")
+    time.sleep(3)
+    driver.terminate_app("fi.sbweather.app")
 
-Check Element Exists
-    [Arguments]    ${locator}    ${timeout}=10
-    Wait Until Page Contains Element    ${locator}    ${timeout}
-    Page Should Contain Element    ${locator}
+except Exception as e:
+    print(f"Note: Some test or tests failed: {e}")
+    test_passed = False
+    save_screenshot(driver, "Exception_", timestamp, failed=True)
 
-Tap And Test Location
-    [Arguments]    ${accessibility_id}    ${location_name}    ${screenshot_prefix}
-    Click Element    accessibility_id=${accessibility_id}
-    Sleep    10s
-    Run Keyword And Ignore Error    Check Element Exists    accessibility_id=LÄMPÖTILA
-    ${exists}=    Run Keyword And Return Status    Check Element Exists    accessibility_id=LÄMPÖTILA
-    Run Keyword If    '${exists}'=='True'    Save Screenshot    ${screenshot_prefix}_ok
-    Run Keyword If    '${exists}'=='False'    Save Screenshot    ${screenshot_prefix}_fail    ${True}
+finally:
+    # Quit the driver
+    driver.quit()
 
-*** Test Cases ***
-Test Home Tab Visibility
-    [Documentation]    Testaa että HOME-välilehti on näkyvissä
-    Check Element Exists    accessibility_id=KOTI\nTab 1 of 3
-    Save Screenshot    home_tab_visible
+# Print test results 
+if test_passed:
+    print("All tests passed successfully!")
+else:
+    print("Some test failed. Check screenshots_failed directory.")
 
-Test Oulu Search
-    [Documentation]    Testaa Oulun hakutoiminnallisuus
-    Tap Coordinates    400    780
-    Sleep    3s
-    Input Text Via ADB    Oulu
-    Save Screenshot    oulu_search
-    Sleep    5s
-    Tap And Test Location    Oulu Vihreäsaari    Oulu Vihreäsaari    Weather_oulu_vihreasaari
-    Tap And Test Location    Oulu lentoasema    Oulu lentoasema    Weather_oulu_airport
-
-Test Weather Data Loading
-    [Documentation]    Testaa että säätiedot latautuvat
-    ${view_coords}=    Create List    300,1150    790,1150    300,1480    790,1480
-    ${view_ids}=       Create List    Lämpimimmät    Kylmimmät    Sateisimmat    Tuulisimmat
-    ${view_names}=     Create List    Max_Temp    Low_Temp    Most_Rain    Most_Windy
-
-    :FOR    ${index}    IN RANGE    0    4
-    \    ${coords}=    Get From List    ${view_coords}    ${index}
-    \    ${x}=    Split String    ${coords}    ,    first_only=True
-    \    ${y}=    Split String    ${coords}    ,    first_only=False
-    \    Log    Opening view ${view_names[${index}]} at ${x},${y}
-    \    Tap Coordinates    ${x}    ${y}
-    \    Sleep    6s
-    \    Tap And Test Location    ${view_ids[${index}]}    ${view_ids[${index}]}    ${view_names[${index}]}
-    \    Press Keycode    4    # Android Back
-    \    Sleep    3s
-
-    # RECORDS tab
-    Click Element    accessibility_id=ENNÄTYKSET\nTab 2 of 3
-    Sleep    3s
-    Check Element Exists    class=android.widget.ImageView
-    Save Screenshot    Records_widget
-
-    # Final check HOME tab
-    Check Element Exists    accessibility_id=KOTI\nTab 1 of 3
-    Save Screenshot    HOME_button_final
+# Exit code for test automation results (0 = success, 1 = failure)
+sys.exit(0 if test_passed else 1)
