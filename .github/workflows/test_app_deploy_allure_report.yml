@@ -32,19 +32,19 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
-      - name: Create directories for Allure
+      - name: Clean and create directories for Allure
         shell: powershell
         run: |
-          # Luo tarvittavat hakemistot ja varmista että ne eivät tyhjenny
-          if (!(Test-Path -Path "./allure-results/history")) {
-              New-Item -ItemType Directory -Path "./allure-results/history" -Force
-          }
-          if (!(Test-Path -Path "./history")) {
-              New-Item -ItemType Directory -Path "./history" -Force
-          }
-          Write-Host "Directories created/verified successfully"
+          # Tyhjennä hakemistot ja luo ne uudelleen
+          Remove-Item -Path "./allure-results" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "./history" -Recurse -Force -ErrorAction SilentlyContinue
+          
+          # Luo puhtaat hakemistot
+          New-Item -ItemType Directory -Path "./allure-results/history" -Force
+          New-Item -ItemType Directory -Path "./history" -Force
+          Write-Host "Directories cleaned and recreated successfully"
 
-      - name: Download previous allure history
+      - name: Download previous allure history (optional)
         uses: actions/download-artifact@v4
         with:
           name: allure-history
@@ -76,6 +76,14 @@ jobs:
                   Get-ChildItem -Path "./history" -File | ForEach-Object { Write-Host "  - $($_.Name)" }
               } else {
                   Write-Host "No history files found in allure-report/history"
+                  
+                  # Luo tyhjä history-tiedosto ensimmäistä ajoa varten
+                  $emptyHistory = @{
+                    "buildOrder" = 1
+                    "reportName" = "Allure Report"
+                  }
+                  $emptyHistory | ConvertTo-Json | Out-File -FilePath "./history/empty-history.json"
+                  Write-Host "Created empty-history.json for first run"
               }
           } else {
               Write-Host "allure-report/history directory does not exist"
