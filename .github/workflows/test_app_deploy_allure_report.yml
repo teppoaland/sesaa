@@ -32,7 +32,11 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
-      # 1. Lataa vanha historia erilliseen juurikansioon
+      # 1. Aja testit ja kerää Allure-tulokset
+      - name: Run Appium tests with Allure reporting
+        run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
+
+      # 2. Lataa edellinen historia artifactista GitHubista
       - name: Download previous allure history
         uses: actions/download-artifact@v4
         with:
@@ -40,11 +44,7 @@ jobs:
           path: ./history
         continue-on-error: true
 
-      # 2. Aja testit (tämä tyhjentää allure-results joka ajolla)
-      - name: Run Appium tests with Allure reporting
-        run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
-
-      # 3. Kopioi vanha history uuteen allure-results/histroy -kansioon
+      # 3. Yhdistä edellinen historia uuteen results-kansioon
       - name: Restore history into new results
         if: always()
         run: |
@@ -53,14 +53,14 @@ jobs:
             cp -r history/* allure-results/history/ || true
           fi
 
-      # 4. Generoi raportti
+      # 4. Generoi Allure-raportti
       - name: Generate Allure report
         if: always()
         run: |
           npm install -g allure-commandline
           allure generate allure-results --clean -o allure-report
 
-      # 5. Uploadaa uusin history artifact (nyt oikein lähteestä allure-report/history)
+      # 5. Tallenna uusi historia artifactiksi seuraavaa ajoa varten
       - name: Upload history artifact for next run
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,6 +69,7 @@ jobs:
           path: allure-report/history/
           retention-days: 30
 
+      # 6. Tallenna koko raportti artifactiksi
       - name: Upload Allure report artifact
         if: always()
         uses: actions/upload-artifact@v4
