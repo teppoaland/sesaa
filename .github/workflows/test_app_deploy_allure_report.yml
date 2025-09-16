@@ -32,34 +32,24 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
-      - name: Create and prepare history directory
+      - name: Create directories for Allure
         shell: powershell
         run: |
-          # Luo history-kansio juureen (jos ei ole)
-          New-Item -ItemType Directory -Path "./history" -Force
-          # Luo myös Allurelle vaadittu history-kansio
-          New-Item -ItemType Directory -Path "./allure-results/history" -Force
+          # Luo tarvittavat hakemistot ja varmista että ne eivät tyhjenny
+          if (!(Test-Path -Path "./allure-results/history")) {
+              New-Item -ItemType Directory -Path "./allure-results/history" -Force
+          }
+          if (!(Test-Path -Path "./history")) {
+              New-Item -ItemType Directory -Path "./history" -Force
+          }
+          Write-Host "Directories created/verified successfully"
 
       - name: Download previous allure history
         uses: actions/download-artifact@v4
         with:
           name: allure-history
-          path: ./history
+          path: ./allure-results/history
         continue-on-error: true
-
-      - name: Copy history to allure-results
-        shell: powershell
-        run: |
-          # Kopioi historia Alluren odottamaan paikkaan, jos historiaa on
-          if (Test-Path -Path "./history" -PathType Container) {
-              $files = Get-ChildItem -Path "./history" -File
-              if ($files.Count -gt 0) {
-                  Copy-Item -Path "./history/*" -Destination "./allure-results/history/" -Recurse -Force
-                  Write-Host "History copied successfully"
-              } else {
-                  Write-Host "No history files to copy"
-              }
-          }
 
       - name: Run Appium tests with Allure reporting
         run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
@@ -70,18 +60,25 @@ jobs:
           npm install -g allure-commandline
           allure generate allure-results --clean -o allure-report
 
-      - name: Copy new history from report to permanent location
+      - name: Check and copy history from report
         shell: powershell
         run: |
-          # Kopioi uusin historia raportista pysyvään sijaintiin
+          Write-Host "Checking for history files in allure-report..."
           if (Test-Path -Path "./allure-report/history" -PathType Container) {
               $files = Get-ChildItem -Path "./allure-report/history" -File
               if ($files.Count -gt 0) {
+                  Write-Host "Found $($files.Count) history files, copying to permanent location"
+                  # Kopioi historia pysyvään sijaintiin
                   Copy-Item -Path "./allure-report/history/*" -Destination "./history/" -Recurse -Force
-                  Write-Host "New history copied to permanent location"
+                  Write-Host "History copied to ./history/"
+                  
+                  # Listaa kopioidut tiedostot
+                  Get-ChildItem -Path "./history" -File | ForEach-Object { Write-Host "  - $($_.Name)" }
               } else {
-                  Write-Host "No new history files to copy"
+                  Write-Host "No history files found in allure-report/history"
               }
+          } else {
+              Write-Host "allure-report/history directory does not exist"
           }
 
       - name: Upload history artifact for next run
@@ -91,6 +88,7 @@ jobs:
           name: allure-history
           path: ./history/
           retention-days: 30
+          if-no-files-found: warn
 
       - name: Upload Allure report artifact
         if: always()
