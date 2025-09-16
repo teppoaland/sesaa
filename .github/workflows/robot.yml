@@ -1,4 +1,92 @@
-- name: Run Robot Framework tests
-  run: |
-    pip install robotframework robotframework-appiumlibrary
-    python run_robot_tests.py
+name: Run Weather App Robot Framework Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      save_all_screenshots:
+        description: 'Save all screenshots (not just failed ones)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  robot-tests:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use system Python
+        run: python --version
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install --upgrade Appium-Python-Client robotframework robotframework-appiumlibrary
+
+      - name: Verify ADB connection
+        shell: powershell
+        run: |
+          adb kill-server
+          adb start-server
+          Write-Host "Connected devices:"
+          adb devices
+          $deviceCount = (adb devices | Select-Object -Skip 1 | Where-Object { $_ -match "device$" } | Measure-Object).Count
+          if ($deviceCount -eq 0) {
+            Write-Error "No devices connected"
+            exit 1
+          }
+
+      - name: Start Appium server
+        shell: powershell
+        run: |
+          # Kill any existing Appium processes
+          Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*appium*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+
+          # Start Appium server as a background job
+          $appiumJob = Start-Job -ScriptBlock {
+            node "$(npm root -g)/appium/build/lib/main.js" -p 4723 --allow-insecure="*:adb_shell"
+          }
+
+          # Wait for Appium to start
+          $timeout = 60
+          $counter = 0
+          $appiumReady = $false
+          while ($counter -lt $timeout) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:4723/status" -UseBasicParsing -TimeoutSec 2
+              if ($response.StatusCode -eq 200) {
+                Write-Host "Appium server is ready!"
+                $appiumReady = $true
+                break
+              }
+            } catch {
+              Start-Sleep -Seconds 2
+              $counter += 2
+            }
+          }
+
+          if (-not $appiumReady) {
+            Write-Error "Appium failed to start within timeout period"
+            exit 1
+          }
+
+      - name: Run Robot Framework tests
+        shell: powershell
+        run: |
+          robot -d results wheater_app_tests.robot
+          $testExitCode = $LASTEXITCODE
+          
+          # Stop Appium server
+          Stop-Job $appiumJob -ErrorAction SilentlyContinue
+          Remove-Job $appiumJob -Force -ErrorAction SilentlyContinue
+          
+          exit $testExitCode
+
+      - name: Upload Robot Framework results
+        uses: actions/upload-artifact@v3
+        with:
+          name: rf-results
+          path: results/
