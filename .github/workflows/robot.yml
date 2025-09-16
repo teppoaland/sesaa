@@ -1,0 +1,4 @@
+- name: Run Robot Framework tests
+  run: |
+    pip install robotframework robotframework-appiumlibrary
+    python run_robot_tests.py
