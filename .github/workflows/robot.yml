@@ -1,67 +1,84 @@
-*** Settings ***
-Library    AppiumLibrary
-Library    Collections
-Library    OperatingSystem
-Library    String
-Library    BuiltIn
+name: Run Weather App Robot Framework Tests
 
-Suite Setup      Open Weather App
-Suite Teardown   Close Application
+on:
+  workflow_dispatch:
+    inputs:
+      save_all_screenshots:
+        description: 'Save all screenshots (not just failed ones)'
+        required: false
+        default: false
+        type: boolean
 
-*** Variables ***
-${APPIUM_SERVER}    http://127.0.0.1:4723
-${DEVICE_NAME}      Android_test_device
-${APP_PACKAGE}      fi.sbweather.app
-${APP_ACTIVITY}     fi.sbweather.app.MainActivity
-${AUTOMATION_NAME}  UiAutomator2
-${NO_RESET}         True
-${FULL_RESET}       False
+jobs:
+  robot-tests:
+    runs-on: self-hosted
 
-*** Keywords ***
-Open Weather App
-    Open Application
-    ...    ${APPIUM_SERVER}
-    ...    platformName=Android
-    ...    deviceName=${DEVICE_NAME}
-    ...    appPackage=${APP_PACKAGE}
-    ...    appActivity=${APP_ACTIVITY}
-    ...    automationName=${AUTOMATION_NAME}
-    ...    noReset=${NO_RESET}
-    ...    fullReset=${FULL_RESET}
-    Set Appium Timeout    30 seconds
+    steps:
+      # 1️⃣ Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-Tap Coordinates
-    [Arguments]    ${x}    ${y}
-    Tap With Positions    100    ${x}    ${y}
+      # 2️⃣ Näytä ympäristön tiedot
+      - name: Show environment info
+        shell: powershell
+        run: |
+          Write-Host "GitHub Workspace: $env:GITHUB_WORKSPACE"
+          Write-Host "Current directory:"
+          pwd
+          Write-Host "Python version:" 
+          python --version
+          Write-Host "Node.js version:"
+          node --version
 
-Input Text Via ADB
-    [Arguments]    ${text}
-    Execute Script    mobile: shell    { "command": "input", "args": ["text", "${text}"], "includeStderr": true, "timeout": 5000 }
+      # 3️⃣ Asenna Python-riippuvuudet
+      - name: Install Python dependencies
+        shell: powershell
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install --upgrade Appium-Python-Client robotframework robotframework-appiumlibrary
 
-Save Screenshot
-    [Arguments]    ${filename}
-    Capture Page Screenshot    ${filename}.png
+      # 4️⃣ Varmista ADB-laite
+      - name: Verify ADB connection
+        shell: powershell
+        run: |
+          adb kill-server
+          adb start-server
+          Start-Sleep -Seconds 2
+          Write-Host "Connected devices:"
+          adb devices
+          $deviceCount = (adb devices | Select-Object -Skip 1 | Where-Object { $_ -match "device$" } | Measure-Object).Count
+          if ($deviceCount -eq 0) {
+            Write-Error "No devices connected"
+            exit 1
+          }
 
-Check Element Exists
-    [Arguments]    ${locator}    ${timeout}=10
-    Wait Until Page Contains Element    ${locator}    ${timeout}
-    Page Should Contain Element    ${locator}
+      # 5️⃣ Aja Robot Framework testit
+      - name: Run Robot Framework tests
+        shell: powershell
+        run: |
+          Write-Host "Running Robot Framework tests..."
+          $screenshotParam = ""
+          if ("${{ github.event.inputs.save_all_screenshots }}" -eq "true") {
+            $screenshotParam = "all"
+          }
+          robot --outputdir robot-reports --log robot-log.html --report robot-report.html --xunit robot-xunit.xml weather_app_tests.robot
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ Tests passed successfully!"
+          } else {
+            Write-Host "❌ Tests failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
 
-*** Test Cases ***
-Test Home Tab Visibility
-    [Documentation]    Testaa että HOME-välilehti on näkyvissä
-    Check Element Exists    accessibility_id=KOTI\nTab 1 of 3
-    Save Screenshot    home_tab_visible
-
-Test Oulu Search
-    [Documentation]    Testaa Oulun hakutoiminnallisuus
-    Tap Coordinates    400    780
-    Sleep    3s
-    Input Text Via ADB    Oulu
-    Save Screenshot    oulu_search
-    Sleep    5s    # Odota hakutuloksia
-
-Test Weather Data Loading
-    [Documentation]    Testaa että säätiedot latautuvat
-    Check Element Exists    accessibility_id=LÄMPÖTILA    15
-    Save Screenshot    weather_data_loaded
+      # 6️⃣ Lataa raportit artefaktina
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: robot-framework-reports
+          path: |
+            robot-reports/
+            robot-log.html
+            robot-report.html
+            robot-xunit.xml
+          retention-days: 7
