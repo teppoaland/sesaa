@@ -20,8 +20,6 @@ Open Weather App
     ...    appPackage=fi.sbweather.app
     ...    appActivity=fi.sbweather.app.MainActivity
     ...    automationName=UiAutomator2
-    ...    noReset=True
-    ...    fullReset=False
     Set Appium Timeout    30 seconds
 
 Tap Coordinates
@@ -53,7 +51,7 @@ Test Oulu Search
     Sleep    3s
     Input Text Via ADB    Oulu
     Save Screenshot    oulu_search
-    Sleep    5s    # Odota hakutuloksia
+    Sleep    5s
 
 Test Weather Data Loading
     [Documentation]    Testaa että säätiedot latautuvat
