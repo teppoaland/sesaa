@@ -86,7 +86,7 @@ jobs:
           exit $testExitCode
 
       - name: Upload Robot Framework results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: rf-results
           path: results/
