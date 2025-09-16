@@ -32,24 +32,25 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
-      - name: Clean and create directories for Allure
+      - name: Verify existing history structure
         shell: powershell
         run: |
-          # Tyhjennä hakemistot ja luo ne uudelleen
-          Remove-Item -Path "./allure-results" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "./history" -Recurse -Force -ErrorAction SilentlyContinue
-          
-          # Luo puhtaat hakemistot
-          New-Item -ItemType Directory -Path "./allure-results/history" -Force
-          New-Item -ItemType Directory -Path "./history" -Force
-          Write-Host "Directories cleaned and recreated successfully"
-
-      - name: Download previous allure history (optional)
-        uses: actions/download-artifact@v4
-        with:
-          name: allure-history
-          path: ./allure-results/history
-        continue-on-error: true
+          Write-Host "Checking existing history structure..."
+          # Tarkista onko historiaa jo olemassa
+          if (Test-Path -Path "./history" -PathType Container) {
+              $files = Get-ChildItem -Path "./history" -File
+              Write-Host "Found $($files.Count) files in history folder"
+              Get-ChildItem -Path "./history" -File | ForEach-Object { Write-Host "  - $($_.Name)" }
+              
+              # Kopioi olemassa oleva historia Allurelle
+              New-Item -ItemType Directory -Path "./allure-results/history" -Force
+              Copy-Item -Path "./history/*" -Destination "./allure-results/history/" -Recurse -Force
+              Write-Host "Existing history copied to allure-results/history"
+          } else {
+              Write-Host "No existing history found, starting fresh"
+              New-Item -ItemType Directory -Path "./allure-results/history" -Force
+              New-Item -ItemType Directory -Path "./history" -Force
+          }
 
       - name: Run Appium tests with Allure reporting
         run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
@@ -60,33 +61,20 @@ jobs:
           npm install -g allure-commandline
           allure generate allure-results --clean -o allure-report
 
-      - name: Check and copy history from report
+      - name: Update history with new results
         shell: powershell
         run: |
-          Write-Host "Checking for history files in allure-report..."
+          Write-Host "Updating history with new test results..."
           if (Test-Path -Path "./allure-report/history" -PathType Container) {
               $files = Get-ChildItem -Path "./allure-report/history" -File
               if ($files.Count -gt 0) {
-                  Write-Host "Found $($files.Count) history files, copying to permanent location"
-                  # Kopioi historia pysyvään sijaintiin
+                  # Päivitä historia uusilla tuloksilla
                   Copy-Item -Path "./allure-report/history/*" -Destination "./history/" -Recurse -Force
-                  Write-Host "History copied to ./history/"
+                  Write-Host "History updated with $($files.Count) new files"
                   
-                  # Listaa kopioidut tiedostot
+                  # Listaa päivitetyt tiedostot
                   Get-ChildItem -Path "./history" -File | ForEach-Object { Write-Host "  - $($_.Name)" }
-              } else {
-                  Write-Host "No history files found in allure-report/history"
-                  
-                  # Luo tyhjä history-tiedosto ensimmäistä ajoa varten
-                  $emptyHistory = @{
-                    "buildOrder" = 1
-                    "reportName" = "Allure Report"
-                  }
-                  $emptyHistory | ConvertTo-Json | Out-File -FilePath "./history/empty-history.json"
-                  Write-Host "Created empty-history.json for first run"
               }
-          } else {
-              Write-Host "allure-report/history directory does not exist"
           }
 
       - name: Upload history artifact for next run
