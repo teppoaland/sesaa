@@ -42,7 +42,7 @@ jobs:
       - name: Run Appium tests with Allure reporting
         run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
 
-        - name: Generate Allure report
+      - name: Generate Allure report
         if: always()
         run: |
           npm install -g allure-commandline
