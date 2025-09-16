@@ -13,13 +13,16 @@ ${APPIUM_SERVER}    http://127.0.0.1:4723
 
 *** Keywords ***
 Open Weather App
-    Open Application
-    ...    ${APPIUM_SERVER}
+    ${options}=    Create Dictionary
     ...    platformName=Android
     ...    deviceName=Android_test_device
     ...    appPackage=fi.sbweather.app
     ...    appActivity=fi.sbweather.app.MainActivity
     ...    automationName=UiAutomator2
+    ...    noReset=${TRUE}
+    ...    fullReset=${FALSE}
+    
+    Open Application    ${APPIUM_SERVER}    ${options}
     Set Appium Timeout    30 seconds
 
 Tap Coordinates
@@ -28,7 +31,7 @@ Tap Coordinates
 
 Input Text Via ADB
     [Arguments]    ${text}
-    Execute Script    mobile: shell    { "command": "input", "args": ["text", "${text}"], "includeStderr": true, "timeout": 5000 }
+    Execute Mobile Command    shell    command=input    args=text ${text}
 
 Save Screenshot
     [Arguments]    ${filename}
@@ -42,7 +45,7 @@ Check Element Exists
 *** Test Cases ***
 Test Home Tab Visibility
     [Documentation]    Testaa että HOME-välilehti on näkyvissä
-    Check Element Exists    accessibility_id=KOTI\nTab 1 of 3
+    Check Element Exists    accessibility_id=KOTI
     Save Screenshot    home_tab_visible
 
 Test Oulu Search
@@ -50,10 +53,13 @@ Test Oulu Search
     Tap Coordinates    400    780
     Sleep    3s
     Input Text Via ADB    Oulu
-    Save Screenshot    oulu_search
     Sleep    5s
+    # Odotetaan ensimmäistä hakutulos-elementtiä (korvaa oikealla locatorilla)
+    Check Element Exists    xpath=//android.widget.TextView[contains(@text,'Oulu')]
+    Save Screenshot    oulu_search
 
 Test Weather Data Loading
     [Documentation]    Testaa että säätiedot latautuvat
-    Check Element Exists    accessibility_id=LÄMPÖTILA    15
+    # Käytä tässä tarkkaa locatoria Appium Inspectorista, esim:
+    Check Element Exists    xpath=//android.widget.TextView[contains(@content-desc,'LÄMPÖTILA')]    15
     Save Screenshot    weather_data_loaded
