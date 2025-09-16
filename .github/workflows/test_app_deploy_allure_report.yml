@@ -32,25 +32,24 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
-      - name: Verify existing history structure
+      - name: Ensure directories exist without cleaning
         shell: powershell
         run: |
-          Write-Host "Checking existing history structure..."
-          # Tarkista onko historiaa jo olemassa
-          if (Test-Path -Path "./history" -PathType Container) {
-              $files = Get-ChildItem -Path "./history" -File
-              Write-Host "Found $($files.Count) files in history folder"
-              Get-ChildItem -Path "./history" -File | ForEach-Object { Write-Host "  - $($_.Name)" }
-              
-              # Kopioi olemassa oleva historia Allurelle
+          # Varmistetaan että hakemistot ovat olemassa ILMAN tyhjennystä
+          if (!(Test-Path -Path "./allure-results/history")) {
               New-Item -ItemType Directory -Path "./allure-results/history" -Force
-              Copy-Item -Path "./history/*" -Destination "./allure-results/history/" -Recurse -Force
-              Write-Host "Existing history copied to allure-results/history"
-          } else {
-              Write-Host "No existing history found, starting fresh"
-              New-Item -ItemType Directory -Path "./allure-results/history" -Force
+          }
+          if (!(Test-Path -Path "./history")) {
               New-Item -ItemType Directory -Path "./history" -Force
           }
+          Write-Host "Directories verified without cleaning"
+
+      - name: Download previous allure history
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-history
+          path: ./allure-results/history  # Ladataan historia suoraan Alluren odottamaan paikkaan
+        continue-on-error: true
 
       - name: Run Appium tests with Allure reporting
         run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
@@ -61,19 +60,15 @@ jobs:
           npm install -g allure-commandline
           allure generate allure-results --clean -o allure-report
 
-      - name: Update history with new results
+      - name: Backup history for next run
         shell: powershell
         run: |
-          Write-Host "Updating history with new test results..."
+          # Kopioidaan historia pysyvään säilöön
           if (Test-Path -Path "./allure-report/history" -PathType Container) {
               $files = Get-ChildItem -Path "./allure-report/history" -File
               if ($files.Count -gt 0) {
-                  # Päivitä historia uusilla tuloksilla
                   Copy-Item -Path "./allure-report/history/*" -Destination "./history/" -Recurse -Force
-                  Write-Host "History updated with $($files.Count) new files"
-                  
-                  # Listaa päivitetyt tiedostot
-                  Get-ChildItem -Path "./history" -File | ForEach-Object { Write-Host "  - $($_.Name)" }
+                  Write-Host "History backed up for next run: $($files.Count) files"
               }
           }
 
