@@ -13,16 +13,15 @@ ${APPIUM_SERVER}    http://127.0.0.1:4723
 
 *** Keywords ***
 Open Weather App
-    ${options}=    Create Dictionary
+    Open Application
+    ...    ${APPIUM_SERVER}
     ...    platformName=Android
     ...    deviceName=Android_test_device
     ...    appPackage=fi.sbweather.app
     ...    appActivity=fi.sbweather.app.MainActivity
     ...    automationName=UiAutomator2
-    ...    noReset=${True}
-    ...    fullReset=${False}
-    
-    Open Application    ${APPIUM_SERVER}    ${options}
+    ...    noReset=True
+    ...    fullReset=False
     Set Appium Timeout    30 seconds
 
 Tap Coordinates
