@@ -20,7 +20,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Tärkeä: Hakee koko commit-historian Allurea varten
+          fetch-depth: 0
 
       - name: Use system Python
         run: python --version
@@ -36,7 +36,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: allure-history
-          path: allure-results/history  # Allure etsii history-kansion tästä
+          path: ./allure-history
         continue-on-error: true
 
       - name: Run Appium tests with Allure reporting
@@ -46,14 +46,14 @@ jobs:
         if: always()
         run: |
           npm install -g allure-commandline
-          allure generate allure-results -o allure-report
+          allure generate allure-results --history ./allure-history -o allure-report
 
       - name: Upload history artifact for next run
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: allure-history
-          path: allure-results/history/  # Tallennetaan vain history-kansio
+          path: ./allure-history
           retention-days: 30
 
       - name: Upload Allure report artifact
@@ -79,7 +79,7 @@ jobs:
           path: ./allure-report
 
       - name: Setup Pages
-        uses: actions/configure-pages@v4  # Pakollinen GitHub Pages -vaihe
+        uses: actions/configure-pages@v4
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
