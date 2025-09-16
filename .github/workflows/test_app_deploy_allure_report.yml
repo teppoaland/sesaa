@@ -32,26 +32,24 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
-      # 1. Aja testit ja kerää Allure-tulokset
-      - name: Run Appium tests with Allure reporting
-        run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
+      # 1. Luo tarvittavat hakemistot
+      - name: Create directories
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Path "./allure-results/history" -Force
+          Write-Host "Directories created"
 
-      # 2. Lataa edellinen historia artifactista GitHubista
+      # 2. Lataa edellinen historia (jos on olemassa)
       - name: Download previous allure history
         uses: actions/download-artifact@v4
         with:
           name: allure-history
-          path: ./history
+          path: ./allure-results/history
         continue-on-error: true
 
-      # 3. Yhdistä edellinen historia uuteen results-kansioon
-      - name: Restore history into new results
-        if: always()
-        run: |
-          mkdir -p allure-results/history
-          if [ -d "history" ]; then
-            cp -r history/* allure-results/history/ || true
-          fi
+      # 3. Aja testit
+      - name: Run Appium tests with Allure reporting
+        run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
 
       # 4. Generoi Allure-raportti
       - name: Generate Allure report
@@ -60,16 +58,16 @@ jobs:
           npm install -g allure-commandline
           allure generate allure-results --clean -o allure-report
 
-      # 5. Tallenna uusi historia artifactiksi seuraavaa ajoa varten
+      # 5. Tallenna uusi historia artifactiksi
       - name: Upload history artifact for next run
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: allure-history
-          path: allure-report/history/
+          path: ./allure-results/history/
           retention-days: 30
+          if-no-files-found: warn
 
-      # 6. Tallenna koko raportti artifactiksi
       - name: Upload Allure report artifact
         if: always()
         uses: actions/upload-artifact@v4
