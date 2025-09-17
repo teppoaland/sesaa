@@ -20,7 +20,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Essential for Allure history
+          fetch-depth: 0
 
       - name: Use system Python
         run: python --version
@@ -32,87 +32,83 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
-      # 1. Create directory structure
+      # Create directory structure first
       - name: Create Allure directories
         run: |
           mkdir -p ./allure-results/history
           echo "Created allure-results/history directory"
         shell: bash
 
-      # 2. Download previous history artifact
+      # Create initial history if no artifact exists
+      - name: Create initial history if missing
+        run: |
+          if [ ! -f "allure-results/history/history-trend.json" ]; then
+            echo '[{"buildOrder":1,"reportName":"Initial Run","reportUrl":"","data":{"failed":0,"broken":0,"skipped":0,"passed":0,"unknown":0,"total":0}}]' > allure-results/history/history-trend.json
+            echo '{}' > allure-results/history/history.json
+            echo "Created initial history files"
+          fi
+        shell: bash
+
+      # Try to download previous history (will fail gracefully on first run)
       - name: Download previous allure history
         uses: actions/download-artifact@v4
         with:
           name: allure-history
           path: ./allure-results/history
-        continue-on-error: true  # Prevents failure on first run
+        continue-on-error: true
 
-      # 3. Verify and initialize history if missing
-      - name: Verify and initialize history
-        run: |
-          # Check if history files exist and are valid
-          if [ ! -f "allure-results/history/history-trend.json" ]; then
-            echo "Initializing history files..."
-            echo '[{"buildOrder":1,"reportName":"Initial Run","reportUrl":"","data":{"failed":0,"broken":0,"skipped":0,"passed":0,"unknown":0,"total":0}}]' > allure-results/history/history-trend.json
-            echo '{}' > allure-results/history/history.json
-          else
-            # Update buildOrder for new run
-            current_order=$(jq 'map(.buildOrder) | max' allure-results/history/history-trend.json)
-            new_order=$((current_order + 1))
-            jq --argjson new_build "$new_order" '
-              . += [{
-                buildOrder: $new_build,
-                reportName: ("Run #" + ($new_build|tostring)),
-                reportUrl: "",
-                data: {failed:0, broken:0, skipped:0, passed:0, unknown:0, total:0}
-              }]
-            ' allure-results/history/history-trend.json > temp.json && mv temp.json allure-results/history/history-trend.json
-            echo "Updated buildOrder to: $new_order"
-          fi
-        shell: bash
-
-      # 4. Run tests with PowerShell
+      # Run tests with Windows PowerShell instead of pwsh
       - name: Run Appium tests with Allure reporting
-        shell: pwsh
+        shell: powershell
         run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
 
-      # 5. Generate Allure report
+      # Generate Allure report
       - name: Generate Allure report
         run: |
           npm install -g allure-commandline
           allure generate allure-results --clean -o allure-report
         shell: bash
 
-      # 6. Upload history for next run
+      # Upload history for next run
       - name: Upload history artifact for next run
         uses: actions/upload-artifact@v4
         with:
           name: allure-history
           path: ./allure-report/history/
           retention-days: 30
+          if-no-files-found: warn
 
-      # 7. Upload report artifact
+      # Upload report artifact
       - name: Upload Allure report artifact
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
           path: allure-report
+          if-no-files-found: warn
 
   deploy-to-github-pages:
     name: Deploy Allure report to GitHub Pages
     runs-on: ubuntu-latest
     needs: test-and-generate-report
-    if: always()
+    # Continue even if previous job failed
+    if: always()  
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Download report with error handling
       - name: Download Allure report artifact
         uses: actions/download-artifact@v4
         with:
           name: allure-report
           path: ./allure-report
+        continue-on-error: true
 
+      # Setup GitHub Pages
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
+      # Upload to GitHub Pages
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
