@@ -34,56 +34,74 @@ jobs:
           pip install allure-pytest
         shell: powershell
 
-      # 1. Create directory structure
-      - name: Create Allure directories
+      # 1. CRITICAL: Create directory structure for Allure history
+      - name: Create Allure History Directory
         run: |
           New-Item -ItemType Directory -Path "./allure-results/history" -Force
-          Write-Host "Created allure-results/history directory"
+          Write-Host "Created ./allure-results/history directory"
         shell: powershell
 
-      # 2. Download previous history
-      - name: Download previous allure history
+      # 2. CRITICAL: Download history from previous successful run
+      - name: Download Previous Allure History
         uses: actions/download-artifact@v4
         with:
           name: allure-history
-          path: ./allure-results/history
-        continue-on-error: true
+          path: ./allure-results/history  # Must be this exact path
+        continue-on-error: true  # Essential for first run
 
-      # 3. Update Allure history with Python
+      # 3. DEBUG: Verify what was downloaded
+      - name: Verify History Download
+        run: |
+          Write-Host "Contents of ./allure-results/history after download:"
+          Get-ChildItem -Path "./allure-results/history" -File | Format-Table Name, Length
+          $fileCount = (Get-ChildItem -Path "./allure-results/history" -File).Count
+          Write-Host "Total history files found: $fileCount"
+        shell: powershell
+
+      # 4. Update Allure history metadata with Python
       - name: Update Allure history with Python
         run: |
           $env:PYTHONUTF8 = "1"
           python update_allure_history.py -v
         shell: powershell
 
-      # 4. Run tests
+      # 5. Run tests - generates new results in allure-results
       - name: Run Appium tests with Allure reporting
         shell: powershell
         run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
 
-      # 5. Install Allure and generate report using Python
+      # 6. DEBUG: Verify test results were generated
+      - name: Verify Test Results
+        run: |
+          Write-Host "Contents of ./allure-results after tests:"
+          Get-ChildItem -Path "./allure-results" -Exclude "history" | Format-Table Name, Length
+          $resultCount = (Get-ChildItem -Path "./allure-results" -Exclude "history").Count
+          Write-Host "Total test result files: $resultCount"
+        shell: powershell
+
+      # 7. Install Allure CLI and generate report using Python
       - name: Generate Allure report with Python
         run: |
           $env:PYTHONUTF8 = "1"
           python allure_operations.py --install --generate --verbose
         shell: powershell
 
-      # 6. Upload history for next run
+      # 8. CRITICAL: Upload NEW history for NEXT run
       - name: Upload history artifact for next run
         uses: actions/upload-artifact@v4
         with:
           name: allure-history
           path: ./allure-report/history/
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error  # Changed to error to catch issues
 
-      # 7. Upload report artifact
+      # 9. Upload full report artifact for deployment
       - name: Upload Allure report artifact
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
           path: allure-report
-          if-no-files-found: warn
+          if-no-files-found: error  # Changed to error to catch issues
 
   deploy-to-github-pages:
     name: Deploy Allure report to GitHub Pages
