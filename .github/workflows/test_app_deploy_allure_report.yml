@@ -32,11 +32,14 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
-      # 1. Luo historia-hakemistot
+      # 1. Luo historia-hakemistot PowerShellillä
       - name: Create Allure directories
+        shell: pwsh
         run: |
-          mkdir -p ./allure-results/history
-          echo "Created allure-results/history directory"
+          if (!(Test-Path "./allure-results/history")) {
+            New-Item -ItemType Directory -Path "./allure-results/history" | Out-Null
+          }
+          Write-Host "Created allure-results/history directory"
 
       # 2. Lataa edellinen historia artifactista
       - name: Download previous allure history
@@ -46,17 +49,32 @@ jobs:
           path: ./allure-results/history
         continue-on-error: true
 
-      # 3. Luo dummy-historia jos artifactista ei löytynyt
+      # 3. Luo dummy-historia PowerShellillä jos artifactista ei löytynyt
       - name: Create dummy history if needed
+        shell: pwsh
         run: |
-          if [ ! -f "allure-results/history/history-trend.json" ]; then
-            echo "Creating dummy history files"
-            mkdir -p allure-results/history
-            echo '[{"buildOrder":1,"reportName":"Initial Run","reportUrl":"","data":{"failed":0,"broken":0,"skipped":0,"passed":0,"unknown":0,"total":0}}]' > allure-results/history/history-trend.json
-            echo '{}' > allure-results/history/history.json
-          fi
+          if (-not (Test-Path "allure-results/history/history-trend.json")) {
+              Write-Host "Creating dummy history files"
+              $dummyTrend = @(
+                  @{
+                      buildOrder = 1
+                      reportName = "Initial Run"
+                      reportUrl  = ""
+                      data       = @{
+                          failed  = 0
+                          broken  = 0
+                          skipped = 0
+                          passed  = 0
+                          unknown = 0
+                          total   = 0
+                      }
+                  }
+              )
+              $dummyTrend | ConvertTo-Json -Depth 10 | Out-File -FilePath "allure-results/history/history-trend.json" -Encoding UTF8
+              @{} | ConvertTo-Json -Depth 10 | Out-File -FilePath "allure-results/history/history.json" -Encoding UTF8
+          }
 
-      # 4. Aja testit
+      # 4. Aja testit PowerShellillä
       - name: Run Appium tests with Allure reporting
         shell: pwsh
         run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
@@ -67,14 +85,6 @@ jobs:
         with:
           name: allure-results
           path: ./allure-results
-
-      # 6. Tallenna historia artifactiksi seuraavaa ajoa varten
-      - name: Upload history artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-history
-          path: ./allure-results/history
-          retention-days: 30
 
   process-and-deploy:
     name: Generate and Deploy Allure report
@@ -90,59 +100,71 @@ jobs:
           name: allure-results
           path: ./allure-results
 
-      - name: Download history artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: allure-history
-          path: ./allure-results/history
-
-      # 7. Asenna jq ja tarkista historia-trend.json
+      # 6. Asenna jq ja tarkista historia-trend.json
       - name: Install jq and validate history
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
           
+          # Tarkista että history-trend.json on olemassa ja validia JSON:ia
           if [ ! -f "allure-results/history/history-trend.json" ] || ! jq empty "allure-results/history/history-trend.json" 2>/dev/null; then
             echo "Creating valid history-trend.json"
             mkdir -p allure-results/history
             echo '[{"buildOrder":1,"reportName":"Initial Run","reportUrl":"","data":{"failed":0,"broken":0,"skipped":0,"passed":0,"unknown":0,"total":0}}]' > "allure-results/history/history-trend.json"
           fi
 
-      # 8. Päivitä buildOrder oikein
+      # 7. Päivitä buildOrder oikein
       - name: Update history-trend.json with new buildOrder
         run: |
           HISTORY_FILE="allure-results/history/history-trend.json"
+          
+          # Etsi nykyinen maksimi buildOrder
           MAX_BUILD=$(jq '[.[].buildOrder] | max' "$HISTORY_FILE")
           if [ "$MAX_BUILD" = "null" ]; then
             MAX_BUILD=0
           fi
           NEW_BUILD=$((MAX_BUILD + 1))
           
+          # Luo uusi entry
           jq --argjson new_build "$NEW_BUILD" \
             '. += [{
               buildOrder: $new_build,
               reportName: ("Run #" + ($new_build|tostring)),
-              reportUrl: ("https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"),
-              data: {failed:0,broken:0,skipped:0,passed:0,unknown:0,total:0}
+              reportUrl: ("https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"),
+              data: {
+                failed: 0,
+                broken: 0,
+                skipped: 0,
+                passed: 0,
+                unknown: 0,
+                total: 0
+              }
             }]' "$HISTORY_FILE" > "$HISTORY_FILE.tmp"
           
           mv "$HISTORY_FILE.tmp" "$HISTORY_FILE"
           echo "Updated buildOrder to $NEW_BUILD"
 
-      # 9. Generoi Allure-raportti
+      # 8. Generoi Allure-raportti
       - name: Generate Allure report
         run: |
           npm install -g allure-commandline
           allure generate allure-results --clean -o allure-report
 
-      # 10. Upload Allure report artifact
+      # 9. Tallenna historia artifactiksi seuraavaa ajoa varten
+      - name: Upload history artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-history
+          path: ./allure-results/history
+          retention-days: 30
+
       - name: Upload Allure report artifact
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
           path: allure-report
 
-      # 11. Deploy GitHub Pages
+      # 10. Deploy GitHub Pages
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
