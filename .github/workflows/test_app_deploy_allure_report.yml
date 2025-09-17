@@ -81,6 +81,7 @@ jobs:
 
       # 7. Install Allure CLI and generate report using Python
       - name: Generate Allure report with Python
+        if: always()  # Suoritetaan AINA, vaikka edelliset vaiheet epäonnistuisivat
         run: |
           $env:PYTHONUTF8 = "1"
           python allure_operations.py --install --generate --verbose
@@ -88,20 +89,22 @@ jobs:
 
       # 8. CRITICAL: Upload NEW history for NEXT run
       - name: Upload history artifact for next run
+        if: always()  # Suoritetaan AINA
         uses: actions/upload-artifact@v4
         with:
           name: allure-history
           path: ./allure-report/history/
           retention-days: 30
-          if-no-files-found: error  # ← CHANGED FROM 'warn' TO 'error'
+          if-no-files-found: error
 
       # 9. Upload full report artifact for deployment
       - name: Upload Allure report artifact
+        if: always()  # Suoritetaan AINA
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
           path: allure-report
-          if-no-files-found: error  # Changed to error to catch issues
+          if-no-files-found: error
 
   deploy-to-github-pages:
     name: Deploy Allure report to GitHub Pages
