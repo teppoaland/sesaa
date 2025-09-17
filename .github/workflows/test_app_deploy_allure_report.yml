@@ -32,11 +32,27 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
-      # 1. Aja testit ensin (allure-results tyhjentyy joka ajolla)
+      # 1. Aja testit ensin
       - name: Run Appium tests with Allure reporting
         run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
 
-      # 2. Lataa vanha historia GitHubista
+      # 2. Valmistele historia ja mahdollinen dummy ensimmäistä ajoa varten
+      - name: Prepare Allure history
+        shell: powershell
+        run: |
+          $histDir = "$PWD\allure-results\history"
+          if (-not (Test-Path $histDir)) {
+              New-Item -ItemType Directory -Path $histDir -Force | Out-Null
+              Write-Host "History directory created at $histDir"
+          }
+          if (-not (Get-ChildItem -Path $histDir)) {
+              New-Item -ItemType File -Path "$histDir/dummy.txt" -Value "dummy content" | Out-Null
+              Write-Host "Created dummy file for first run"
+          } else {
+              Write-Host "History already exists, continue normally"
+          }
+
+      # 3. Lataa vanha historia GitHub-artifactista (jos on)
       - name: Download previous allure history
         uses: actions/download-artifact@v4
         with:
@@ -44,21 +60,7 @@ jobs:
           path: ./allure-results/history
         continue-on-error: true
 
-      # 3. Luo feikkitiedosto, jos historia on tyhjä (ensimmäinen ajo)
-      - name: Prepare Allure history
-        shell: powershell
-        run: |
-          if (-not (Test-Path "./allure-results/history")) {
-              New-Item -ItemType Directory -Path "./allure-results/history" | Out-Null
-          }
-          if (-not (Get-ChildItem -Path "./allure-results/history")) {
-              New-Item -ItemType File -Path "./allure-results/history/.gitkeep" | Out-Null
-              Write-Host "Created feikkitiedosto .gitkeep ensimmäistä ajoa varten"
-          } else {
-              Write-Host "Historia löytyy, jatketaan normaalisti"
-          }
-
-      # 4. Generoi Allure-raportti (yhdistää historian)
+      # 4. Generoi raportti (Allure käyttää automaattisesti historiaa)
       - name: Generate Allure report
         if: always()
         run: |
@@ -75,7 +77,7 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
-      # 6. Upload Allure report artifact
+      # 6. Uploadaa raportti artifactiksi
       - name: Upload Allure report artifact
         if: always()
         uses: actions/upload-artifact@v4
