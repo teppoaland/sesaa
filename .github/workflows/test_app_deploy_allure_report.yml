@@ -35,10 +35,8 @@ jobs:
       # 1. Luo historia-hakemistot
       - name: Create Allure directories
         run: |
-          if (!(Test-Path "./allure-results/history")) {
-            New-Item -ItemType Directory -Path "./allure-results/history" | Out-Null
-          }
-          Write-Host "Created allure-results/history directory"
+          mkdir -p ./allure-results/history
+          echo "Created allure-results/history directory"
 
       # 2. Lataa edellinen historia artifactista
       - name: Download previous allure history
@@ -51,26 +49,12 @@ jobs:
       # 3. Luo dummy-historia jos artifactista ei löytynyt
       - name: Create dummy history if needed
         run: |
-          if (-not (Test-Path "allure-results/history/history-trend.json")) {
-              Write-Host "Creating dummy history files"
-              $dummyTrend = @(
-                  @{
-                      buildOrder = 1
-                      reportName = "Initial Run"
-                      reportUrl  = ""
-                      data       = @{
-                          failed  = 0
-                          broken  = 0
-                          skipped = 0
-                          passed  = 0
-                          unknown = 0
-                          total   = 0
-                      }
-                  }
-              )
-              $dummyTrend | ConvertTo-Json -Depth 10 | Out-File -FilePath "allure-results/history/history-trend.json" -Encoding UTF8
-              @{} | ConvertTo-Json -Depth 10 | Out-File -FilePath "allure-results/history/history.json" -Encoding UTF8
-          }
+          if [ ! -f "allure-results/history/history-trend.json" ]; then
+            echo "Creating dummy history files"
+            mkdir -p allure-results/history
+            echo '[{"buildOrder":1,"reportName":"Initial Run","reportUrl":"","data":{"failed":0,"broken":0,"skipped":0,"passed":0,"unknown":0,"total":0}}]' > allure-results/history/history-trend.json
+            echo '{}' > allure-results/history/history.json
+          fi
 
       # 4. Aja testit
       - name: Run Appium tests with Allure reporting
