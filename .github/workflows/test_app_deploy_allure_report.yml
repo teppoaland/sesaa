@@ -34,7 +34,6 @@ jobs:
 
       # 1. Luo historia-hakemistot
       - name: Create Allure directories
-        shell: pwsh
         run: |
           if (!(Test-Path "./allure-results/history")) {
             New-Item -ItemType Directory -Path "./allure-results/history" | Out-Null
@@ -51,7 +50,6 @@ jobs:
 
       # 3. Luo dummy-historia jos artifactista ei löytynyt
       - name: Create dummy history if needed
-        shell: pwsh
         run: |
           if (-not (Test-Path "allure-results/history/history-trend.json")) {
               Write-Host "Creating dummy history files"
