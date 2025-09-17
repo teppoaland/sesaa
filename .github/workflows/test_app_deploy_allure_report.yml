@@ -39,7 +39,7 @@ jobs:
           New-Item -ItemType Directory -Path "./allure-results/history" -Force
           Write-Host "Created allure-results/history directory"
 
-      # 2. Lataa edellinen historia GitHub Artifactista
+      # 2. Yritä ladata edellinen historia
       - name: Download previous allure history
         uses: actions/download-artifact@v4
         with:
@@ -47,30 +47,42 @@ jobs:
           path: ./allure-results/history
         continue-on-error: true
 
-      # 3. Luo dummy-historiatiedostot ensimmäistä ajoa varten
-      - name: Create dummy history for first run
+      # 3. Luo dummy-historiatiedostot vain jos historiaa ei löydy
+      - name: Create dummy history if needed
         shell: powershell
         run: |
           $historyPath = "./allure-results/history"
-          if ((Get-ChildItem -Path $historyPath -File | Measure-Object).Count -eq 0) {
-              Write-Host "Creating dummy history files for first run"
+          $files = Get-ChildItem -Path $historyPath -File
+          
+          if ($files.Count -eq 0) {
+              Write-Host "No history found, creating dummy history files"
               
-              # Luo tyhjä history.json
-              $emptyHistory = @{
-                  "buildOrder" = 1
-                  "reportName" = "Allure Report"
-                  "buildName" = "Initial Run"
-                  "buildUrl" = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-              }
-              $emptyHistory | ConvertTo-Json | Out-File -FilePath "$historyPath/history.json"
+              # Luo history-trend.json
+              $historyTrend = @(
+                  @{
+                      "buildOrder" = 1
+                      "reportName" = "Initial Run"
+                      "reportUrl" = ""
+                      "data" = @{
+                          "failed" = 0
+                          "broken" = 0
+                          "skipped" = 0
+                          "passed" = 0
+                          "unknown" = 0
+                          "total" = 0
+                      }
+                  }
+              )
+              $historyTrend | ConvertTo-Json | Out-File -FilePath "$historyPath/history-trend.json"
               
-              # Luo tyhjä trend-tiedosto
-              $emptyTrend = @()
-              $emptyTrend | ConvertTo-Json | Out-File -FilePath "$historyPath/history-trend.json"
+              # Luo history.json
+              $history = @{}
+              $history | ConvertTo-Json | Out-File -FilePath "$historyPath/history.json"
               
               Write-Host "Dummy history files created successfully"
           } else {
-              Write-Host "Existing history found, skipping dummy creation"
+              Write-Host "History files found: $($files.Count)"
+              $files | ForEach-Object { Write-Host "  - $($_.Name)" }
           }
 
       # 4. Aja testit
@@ -84,7 +96,47 @@ jobs:
           npm install -g allure-commandline
           allure generate allure-results --clean -o allure-report
 
-      # 6. Tallenna uusi historia GitHub Artifactiksi
+      # 6. Päivitä buildOrder uusille ajokerroille
+      - name: Update history with build order
+        shell: powershell
+        run: |
+          $historyTrendPath = "./allure-results/history/history-trend.json"
+          if (Test-Path $historyTrendPath) {
+              $historyTrend = Get-Content $historyTrendPath | ConvertFrom-Json
+              
+              # Etsi suurin buildOrder
+              $maxBuildOrder = 0
+              foreach ($item in $historyTrend) {
+                  if ($item.buildOrder -gt $maxBuildOrder) {
+                      $maxBuildOrder = $item.buildOrder
+                  }
+              }
+              
+              # Päivitä uusi buildOrder
+              $newBuildOrder = $maxBuildOrder + 1
+              
+              # Lisää uusi entry history-trend.json:ään
+              $newEntry = @{
+                  "buildOrder" = $newBuildOrder
+                  "reportName" = "Run #$newBuildOrder"
+                  "reportUrl" = ""
+                  "data" = @{
+                      "failed" = 0
+                      "broken" = 0
+                      "skipped" = 0
+                      "passed" = 0
+                      "unknown" = 0
+                      "total" = 0
+                  }
+              }
+              
+              $historyTrend += $newEntry
+              $historyTrend | ConvertTo-Json | Out-File -FilePath $historyTrendPath
+              
+              Write-Host "Updated build order to: $newBuildOrder"
+          }
+
+      # 7. Tallenna uusi historia artifactiksi
       - name: Upload history artifact for next run
         if: always()
         uses: actions/upload-artifact@v4
@@ -94,7 +146,6 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
-      # 7. Tallenna Allure-raportti artifactiksi
       - name: Upload Allure report artifact
         if: always()
         uses: actions/upload-artifact@v4
