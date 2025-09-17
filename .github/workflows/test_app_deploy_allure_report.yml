@@ -32,24 +32,14 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
-      # Create directory structure first
+      # 1. Create directory structure (Bash)
       - name: Create Allure directories
         run: |
           mkdir -p ./allure-results/history
           echo "Created allure-results/history directory"
         shell: bash
 
-      # Create initial history if no artifact exists
-      - name: Create initial history if missing
-        run: |
-          if [ ! -f "allure-results/history/history-trend.json" ]; then
-            echo '[{"buildOrder":1,"reportName":"Initial Run","reportUrl":"","data":{"failed":0,"broken":0,"skipped":0,"passed":0,"unknown":0,"total":0}}]' > allure-results/history/history-trend.json
-            echo '{}' > allure-results/history/history.json
-            echo "Created initial history files"
-          fi
-        shell: bash
-
-      # Try to download previous history (will fail gracefully on first run)
+      # 2. Download previous history (GitHub Action)
       - name: Download previous allure history
         uses: actions/download-artifact@v4
         with:
@@ -57,28 +47,94 @@ jobs:
           path: ./allure-results/history
         continue-on-error: true
 
-      # Run tests with Windows PowerShell instead of pwsh
+      # 3. Create initial history if download failed (Bash)
+      - name: Create initial history if missing
+        run: |
+          if [ ! -f "allure-results/history/history-trend.json" ]; then
+            echo '[{"buildOrder":1,"reportName":"Initial Run","reportUrl":"","data":{"failed":0,"broken":0,"skipped":0,"passed":0,"unknown":0,"total":0}}]' > allure-results/history/history-trend.json
+            echo '{}' > allure-results/history/history.json
+            echo "Created initial history files"
+          else
+            echo "History files exist, checking build order..."
+            # Ensure we have a valid build order
+            current_order=$(jq 'map(.buildOrder) | max' allure-results/history/history-trend.json 2>/dev/null || echo "1")
+            if [ "$current_order" = "null" ]; then
+              current_order=1
+            fi
+            echo "Current build order: $current_order"
+          fi
+        shell: bash
+
+      # 4. Run tests (PowerShell)
       - name: Run Appium tests with Allure reporting
-        shell: powershell
+        shell: pwsh  
         run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
 
-      # Generate Allure report
+      # 5. Update build order before generating report (Bash)
+      - name: Update build order in history
+        run: |
+          # Install jq if not available
+          if ! command -v jq &> /dev/null; then
+            echo "Installing jq..."
+            # For Windows with Chocolatey: choco install jq -y
+            # For Ubuntu: sudo apt-get install -y jq
+            # For self-hosted runner, you might need to pre-install jq
+            echo "jq not available, skipping build order update"
+            exit 0
+          fi
+          
+          HISTORY_FILE="allure-results/history/history-trend.json"
+          if [ -f "$HISTORY_FILE" ]; then
+            # Get current max build order
+            current_order=$(jq 'map(.buildOrder) | max' "$HISTORY_FILE")
+            if [ "$current_order" = "null" ]; then
+              current_order=0
+            fi
+            new_order=$((current_order + 1))
+            
+            echo "Updating build order from $current_order to $new_order"
+            
+            # Create updated history with new build order
+            jq --argjson new_build "$new_order" '
+              . += [{
+                buildOrder: $new_build,
+                reportName: ("Run #" + ($new_build|tostring)),
+                reportUrl: ("https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"),
+                data: {
+                  failed: 0,
+                  broken: 0,
+                  skipped: 0,
+                  passed: 0,
+                  unknown: 0,
+                  total: 0
+                }
+              }]
+            ' "$HISTORY_FILE" > "${HISTORY_FILE}.tmp"
+            
+            mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
+            echo "Build order updated to $new_order"
+          else
+            echo "No history file found, skipping build order update"
+          fi
+        shell: bash
+
+      # 6. Generate Allure report (Bash)
       - name: Generate Allure report
         run: |
           npm install -g allure-commandline
           allure generate allure-results --clean -o allure-report
         shell: bash
 
-      # Upload history for next run
+      # 7. Upload history for next run (GitHub Action)
       - name: Upload history artifact for next run
         uses: actions/upload-artifact@v4
         with:
           name: allure-history
-          path: ./allure-report/history/
+          path: ./allure-results/history/
           retention-days: 30
           if-no-files-found: warn
 
-      # Upload report artifact
+      # 8. Upload report artifact (GitHub Action)
       - name: Upload Allure report artifact
         uses: actions/upload-artifact@v4
         with:
@@ -90,13 +146,11 @@ jobs:
     name: Deploy Allure report to GitHub Pages
     runs-on: ubuntu-latest
     needs: test-and-generate-report
-    # Continue even if previous job failed
-    if: always()  
+    if: always()
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Download report with error handling
       - name: Download Allure report artifact
         uses: actions/download-artifact@v4
         with:
@@ -104,11 +158,9 @@ jobs:
           path: ./allure-report
         continue-on-error: true
 
-      # Setup GitHub Pages
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      # Upload to GitHub Pages
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
