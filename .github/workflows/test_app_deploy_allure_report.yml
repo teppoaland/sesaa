@@ -39,7 +39,7 @@ jobs:
           New-Item -ItemType Directory -Path "./allure-results/history" -Force
           Write-Host "Created allure-results/history directory"
 
-      # 2. Yritä ladata edellinen historia
+      # 2. Lataa edellinen historia artifactista (jos löytyy)
       - name: Download previous allure history
         uses: actions/download-artifact@v4
         with:
@@ -47,7 +47,7 @@ jobs:
           path: ./allure-results/history
         continue-on-error: true
 
-      # 3. Luo dummy-historiatiedostot vain jos historiaa ei löydy
+      # 3. Luo dummy-historiatiedostot ensimmäistä ajoa varten
       - name: Create dummy history if needed
         shell: powershell
         run: |
@@ -59,19 +59,7 @@ jobs:
               
               # Luo history-trend.json
               $historyTrend = @(
-                  @{
-                      "buildOrder" = 1
-                      "reportName" = "Initial Run"
-                      "reportUrl" = ""
-                      "data" = @{
-                          "failed" = 0
-                          "broken" = 0
-                          "skipped" = 0
-                          "passed" = 0
-                          "unknown" = 0
-                          "total" = 0
-                      }
-                  }
+                  @{"buildOrder"=1;"reportName"="Initial Run";"reportUrl"="";"data"=@{"failed"=0;"broken"=0;"skipped"=0;"passed"=0;"unknown"=0;"total"=0}}
               )
               $historyTrend | ConvertTo-Json | Out-File -FilePath "$historyPath/history-trend.json"
               
@@ -97,46 +85,56 @@ jobs:
           allure generate allure-results --clean -o allure-report
 
       # 6. Päivitä buildOrder uusille ajokerroille
-      - name: Update history with build order
+      - name: Update build order
         shell: powershell
         run: |
           $historyTrendPath = "./allure-results/history/history-trend.json"
           if (Test-Path $historyTrendPath) {
               $historyTrend = Get-Content $historyTrendPath | ConvertFrom-Json
               
-              # Etsi suurin buildOrder
               $maxBuildOrder = 0
-              foreach ($item in $historyTrend) {
-                  if ($item.buildOrder -gt $maxBuildOrder) {
-                      $maxBuildOrder = $item.buildOrder
-                  }
-              }
-              
-              # Päivitä uusi buildOrder
-              $newBuildOrder = $maxBuildOrder + 1
-              
-              # Lisää uusi entry history-trend.json:ään
-              $newEntry = @{
-                  "buildOrder" = $newBuildOrder
-                  "reportName" = "Run #$newBuildOrder"
-                  "reportUrl" = ""
-                  "data" = @{
-                      "failed" = 0
-                      "broken" = 0
-                      "skipped" = 0
-                      "passed" = 0
-                      "unknown" = 0
-                      "total" = 0
-                  }
-              }
-              
-              $historyTrend += $newEntry
-              $historyTrend | ConvertTo-Json | Out-File -FilePath $historyTrendPath
-              
-              Write-Host "Updated build order to: $newBuildOrder"
+              foreach ($item in $historyTrend) { if ($item.buildOrder -gt $maxBuildOrder) { $maxBuildOrder = $item.buildOrder } }
+              $currentBuildOrder = $maxBuildOrder + 1
+              Write-Host "Updated build order to: $currentBuildOrder"
+          } else {
+              $currentBuildOrder = 1
           }
 
-      # 7. Tallenna uusi historia artifactiksi
+      # 7. Päivitä koko historia uusilla tuloksilla
+      - name: Update complete history with new results
+        shell: powershell
+        run: |
+          $historyPath = "./allure-results/history"
+          $resultsPath = "./allure-results"
+          
+          if (Test-Path "$resultsPath/data/test-cases") {
+              $testCases = Get-ChildItem -Path "$resultsPath/data/test-cases" -Filter *.json
+              foreach ($testCase in $testCases) {
+                  $testCaseData = Get-Content $testCase.FullName -Raw | ConvertFrom-Json
+                  $historyFile = "$historyPath/history.json"
+                  
+                  if (Test-Path $historyFile) { $historyData = Get-Content $historyFile -Raw | ConvertFrom-Json }
+                  else { $historyData = @{} }
+                  
+                  $testName = $testCaseData.name
+                  if (-not $historyData.$testName) { $historyData.$testName = @() }
+                  
+                  $newResult = @{
+                      "buildOrder" = $currentBuildOrder
+                      "status" = $testCaseData.status
+                      "time" = @{
+                          "start" = $testCaseData.start
+                          "stop" = $testCaseData.stop
+                          "duration" = $testCaseData.stop - $testCaseData.start
+                      }
+                  }
+                  
+                  $historyData.$testName += $newResult
+                  $historyData | ConvertTo-Json -Depth 10 | Out-File -FilePath $historyFile
+              }
+          }
+
+      # 8. Tallenna uusi historia artifactiksi
       - name: Upload history artifact for next run
         if: always()
         uses: actions/upload-artifact@v4
@@ -146,6 +144,7 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
+      # 9. Tallenna Allure-raportti artifactiksi
       - name: Upload Allure report artifact
         if: always()
         uses: actions/upload-artifact@v4
