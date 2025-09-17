@@ -93,7 +93,7 @@ jobs:
           name: allure-history
           path: ./allure-report/history/
           retention-days: 30
-          if-no-files-found: error  # Changed to error to catch issues
+          if-no-files-found: error  # ← CHANGED FROM 'warn' TO 'error'
 
       # 9. Upload full report artifact for deployment
       - name: Upload Allure report artifact
