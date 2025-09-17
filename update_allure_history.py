@@ -84,16 +84,16 @@ def update_allure_history(verbose=True):
     
     # Print final summary for GitHub UI
     print("=" * 60)
-    print("📊 ALLURE HISTORY UPDATE SUMMARY")
+    print("O ALLURE HISTORY UPDATE SUMMARY")
     print("=" * 60)
-    print(f"✅ New buildOrder: {new_order}")
-    print(f"✅ Total history entries: {len(history_trend)}")
-    print(f"✅ History files updated:")
+    print(f"OK. New buildOrder: {new_order}")
+    print(f"OK Total history entries: {len(history_trend)}")
+    print(f"OK. History files updated:")
     print(f"   - {trend_file}")
     print(f"   - {history_file}")
     
     if verbose and len(history_trend) > 0:
-        print(f"✅ Latest entries:")
+        print(f"OK. Latest entries:")
         for entry in history_trend[-3:]:  # Show last 3 entries
             print(f"   - Build {entry['buildOrder']}: {entry['reportName']}")
     
@@ -113,7 +113,7 @@ if __name__ == '__main__':
         update_allure_history(verbose=verbose)
         sys.exit(0)
     except Exception as e:
-        print(f"❌ CRITICAL ERROR: {e}")
+        print(f"FAIL: CRITICAL ERROR: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
