@@ -32,14 +32,24 @@ jobs:
           python -m pip install --upgrade Appium-Python-Client
           pip install allure-pytest
 
-      # 1. Luo historia-hakemistot - Bash
+      # Create directory structure first
       - name: Create Allure directories
         run: |
           mkdir -p ./allure-results/history
           echo "Created allure-results/history directory"
         shell: bash
 
-      # 2. Lataa edellinen historia artifactista
+      # Create initial history if no artifact exists
+      - name: Create initial history if missing
+        run: |
+          if [ ! -f "allure-results/history/history-trend.json" ]; then
+            echo '[{"buildOrder":1,"reportName":"Initial Run","reportUrl":"","data":{"failed":0,"broken":0,"skipped":0,"passed":0,"unknown":0,"total":0}}]' > allure-results/history/history-trend.json
+            echo '{}' > allure-results/history/history.json
+            echo "Created initial history files"
+          fi
+        shell: bash
+
+      # Try to download previous history (will fail gracefully on first run)
       - name: Download previous allure history
         uses: actions/download-artifact@v4
         with:
@@ -47,67 +57,58 @@ jobs:
           path: ./allure-results/history
         continue-on-error: true
 
-      # 3. Luo dummy-historia jos artifactista ei löytynyt - Bash
-      - name: Create dummy history if needed
-        run: |
-          if [ ! -f "allure-results/history/history-trend.json" ]; then
-            echo "Creating dummy history files"
-            echo '[{"buildOrder":1,"reportName":"Initial Run","reportUrl":"","data":{"failed":0,"broken":0,"skipped":0,"passed":0,"unknown":0,"total":0}}]' > allure-results/history/history-trend.json
-            echo '{}' > allure-results/history/history.json
-          fi
-        shell: bash
-
-      # 4. Aja testit - PowerShell
+      # Run tests with Windows PowerShell instead of pwsh
       - name: Run Appium tests with Allure reporting
-        shell: pwsh
+        shell: powershell
         run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
 
-      # 5. Generoi Allure-raportti - Bash
+      # Generate Allure report
       - name: Generate Allure report
         run: |
           npm install -g allure-commandline
           allure generate allure-results --clean -o allure-report
         shell: bash
 
-      # 6. Tallenna historia artifactiksi - Bash
-      - name: Upload history artifact
+      # Upload history for next run
+      - name: Upload history artifact for next run
         uses: actions/upload-artifact@v4
         with:
           name: allure-history
           path: ./allure-report/history/
           retention-days: 30
+          if-no-files-found: warn
 
-      # 7. Tallenna testitulokset artifactiksi
-      - name: Upload test results artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-results
-          path: ./allure-results
-
-      # 8. Tallenna raportti artifactiksi
+      # Upload report artifact
       - name: Upload Allure report artifact
         uses: actions/upload-artifact@v4
         with:
           name: allure-report
           path: allure-report
+          if-no-files-found: warn
 
   deploy-to-github-pages:
     name: Deploy Allure report to GitHub Pages
     runs-on: ubuntu-latest
     needs: test-and-generate-report
+    # Continue even if previous job failed
+    if: always()  
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Download report with error handling
       - name: Download Allure report artifact
         uses: actions/download-artifact@v4
         with:
           name: allure-report
           path: ./allure-report
+        continue-on-error: true
 
+      # Setup GitHub Pages
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
+      # Upload to GitHub Pages
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
