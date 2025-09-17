@@ -36,9 +36,7 @@ jobs:
       - name: Create Allure directories
         shell: pwsh
         run: |
-          if (!(Test-Path "./allure-results/history")) {
-            New-Item -ItemType Directory -Path "./allure-results/history" | Out-Null
-          }
+          New-Item -ItemType Directory -Path "./allure-results/history" -Force
           Write-Host "Created allure-results/history directory"
 
       # 2. Yritä ladata edellinen historia artifactista
@@ -59,11 +57,12 @@ jobs:
           if (-not $files -or $files.Count -eq 0) {
               Write-Host "No history found, creating dummy history files"
               
+              # Luo history-trend.json taulukolla
               $historyTrend = @(
                   @{
                       "buildOrder" = 1
                       "reportName" = "Initial Run"
-                      "reportUrl"  = ""
+                      "reportUrl"  = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                       "data"       = @{
                           "failed"  = 0
                           "broken"  = 0
@@ -76,6 +75,7 @@ jobs:
               )
               $historyTrend | ConvertTo-Json -Depth 10 | Out-File -FilePath "$historyPath/history-trend.json" -Encoding UTF8
               
+              # Luo tyhjä history.json
               @{} | ConvertTo-Json -Depth 10 | Out-File -FilePath "$historyPath/history.json" -Encoding UTF8
               
               Write-Host "Dummy history files created successfully"
@@ -88,51 +88,89 @@ jobs:
       - name: Run Appium tests with Allure reporting
         run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
 
-      # 5. Generoi Allure-raportti (ilman --clean)
-      - name: Generate Allure report
-        if: always()
-        run: |
-          npm install -g allure-commandline
-          allure generate allure-results -o allure-report
-
-      # 6. Päivitä buildOrder uusille ajokerroille
-      - name: Update history with build order
+      # 5. Päivitä historia testituloksilla
+      - name: Update history with test results
         shell: pwsh
         run: |
           $historyTrendPath = "./allure-results/history/history-trend.json"
           if (Test-Path $historyTrendPath) {
               $historyTrend = Get-Content $historyTrendPath -Raw | ConvertFrom-Json
               
-              if ($historyTrend -isnot [System.Collections.IEnumerable] -or $historyTrend -is [string]) {
+              # Tarkista että data on taulukkomuodossa
+              if ($historyTrend -isnot [array]) {
                   $historyTrend = @($historyTrend)
               }
 
+              # Etsi suurin buildOrder
               $maxBuildOrder = 0
               foreach ($item in $historyTrend) {
-                  if ($item.buildOrder -gt $maxBuildOrder) { $maxBuildOrder = $item.buildOrder }
+                  if ($item.buildOrder -gt $maxBuildOrder) {
+                      $maxBuildOrder = $item.buildOrder
+                  }
               }
 
+              # Päivitä uusi buildOrder
               $newBuildOrder = $maxBuildOrder + 1
 
+              # Analysoi testitulokset
+              $resultsPath = "./allure-results"
+              $passed = 0
+              $failed = 0
+              $skipped = 0
+              $broken = 0
+              $unknown = 0
+              $total = 0
+
+              if (Test-Path "$resultsPath/data/test-cases") {
+                  $testCases = Get-ChildItem -Path "$resultsPath/data/test-cases" -Filter *.json
+                  $total = $testCases.Count
+                  
+                  foreach ($testCase in $testCases) {
+                      $testData = Get-Content $testCase.FullName -Raw | ConvertFrom-Json
+                      switch ($testData.status) {
+                          "passed" { $passed++ }
+                          "failed" { $failed++ }
+                          "skipped" { $skipped++ }
+                          "broken" { $broken++ }
+                          default { $unknown++ }
+                      }
+                  }
+              }
+
+              # Lisää uusi entry history-trend.json:ään
               $newEntry = @{
                   "buildOrder" = $newBuildOrder
                   "reportName" = "Run #$newBuildOrder"
-                  "reportUrl"  = ""
+                  "reportUrl"  = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                   "data"       = @{
-                      "failed"  = 0
-                      "broken"  = 0
-                      "skipped" = 0
-                      "passed"  = 0
-                      "unknown" = 0
-                      "total"   = 0
+                      "failed"  = $failed
+                      "broken"  = $broken
+                      "skipped" = $skipped
+                      "passed"  = $passed
+                      "unknown" = $unknown
+                      "total"   = $total
                   }
               }
 
               $historyTrend += $newEntry
+              
+              # Rajaa historia viimeisimpiin 10 ajoihin
+              if ($historyTrend.Count -gt 10) {
+                  $historyTrend = $historyTrend | Select-Object -Last 10
+              }
+              
               $historyTrend | ConvertTo-Json -Depth 10 | Out-File -FilePath $historyTrendPath -Encoding UTF8
               
               Write-Host "Updated build order to: $newBuildOrder"
+              Write-Host "Test results: $passed passed, $failed failed, $skipped skipped, $broken broken, $unknown unknown"
           }
+
+      # 6. Generoi Allure-raportti
+      - name: Generate Allure report
+        if: always()
+        run: |
+          npm install -g allure-commandline
+          allure generate allure-results --clean -o allure-report
 
       # 7. Tallenna uusi historia artifactiksi
       - name: Upload history artifact for next run
