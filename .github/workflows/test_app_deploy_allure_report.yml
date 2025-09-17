@@ -44,6 +44,13 @@ jobs:
           path: ./history
         continue-on-error: true
 
+      # 2b. Debuggaa ladatun historian sisältö
+      - name: Debug downloaded history
+        if: always()
+        run: |
+          echo "== Contents of ./history =="
+          ls -R ./history || echo "No history folder found"
+
       # 3. Kopioi vanha historia uusiin results-kansioihin
       - name: Restore history into allure-results
         if: always()
@@ -56,6 +63,13 @@ jobs:
               Copy-Item -Path .\history\* -Destination allure-results/history -Recurse -Force
           }
 
+      # 3b. Debuggaa allure-results sisältö ennen raportin generointia
+      - name: Debug allure-results before report generation
+        if: always()
+        run: |
+          echo "== Contents of allure-results =="
+          ls -R allure-results
+
       # 4. Generoi raportti (yhdistää historian)
       - name: Generate Allure report
         if: always()
@@ -63,6 +77,13 @@ jobs:
         run: |
           npm install -g allure-commandline
           allure generate allure-results --clean -o allure-report
+
+      # 4b. Debuggaa raportin generoinnin jälkeen
+      - name: Debug allure-report after generation
+        if: always()
+        run: |
+          echo "== Contents of allure-report =="
+          ls -R allure-report
 
       # 5. Tallenna uusi historia GitHub-artifactiksi
       - name: Upload history artifact for next run
