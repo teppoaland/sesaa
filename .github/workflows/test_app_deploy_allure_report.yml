@@ -34,7 +34,7 @@ jobs:
           pip install allure-pytest
         shell: powershell
 
-      # 1. Create directory structure (PowerShell)
+      # 1. Create directory structure
       - name: Create Allure directories
         run: |
           New-Item -ItemType Directory -Path "./allure-results/history" -Force
@@ -49,23 +49,23 @@ jobs:
           path: ./allure-results/history
         continue-on-error: true
 
-      # 3. Handle Allure history with Python (PowerShell)
+      # 3. Update Allure history with Python
       - name: Update Allure history with Python
         run: |
-          $env:PYTHONUNBUFFERED = "1"
+          $env:PYTHONUTF8 = "1"
           python update_allure_history.py -v
         shell: powershell
 
-      # 4. Run tests (PowerShell)
+      # 4. Run tests
       - name: Run Appium tests with Allure reporting
         shell: powershell
         run: pytest --alluredir=allure-results -v -s Test_features_automation_allure.py
 
-      # 5. Generate Allure report (PowerShell)
-      - name: Generate Allure report
+      # 5. Install Allure and generate report using Python
+      - name: Generate Allure report with Python
         run: |
-          npm install -g allure-commandline
-          allure generate allure-results --clean -o allure-report
+          $env:PYTHONUTF8 = "1"
+          python allure_operations.py --install --generate --verbose
         shell: powershell
 
       # 6. Upload history for next run
