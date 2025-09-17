@@ -52,6 +52,7 @@ jobs:
       # 3. Handle Allure history with Python (PowerShell)
       - name: Update Allure history with Python
         run: |
+          $env:PYTHONUNBUFFERED = "1"
           python update_allure_history.py -v
         shell: powershell
 
