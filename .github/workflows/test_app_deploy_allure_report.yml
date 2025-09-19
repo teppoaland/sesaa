@@ -130,21 +130,28 @@ jobs:
           }
         shell: powershell
 
-      # 8. Update Allure history metadata with Python (BEFORE report generation)
+      # 8. Update history BEFORE report generation
       - name: Update Allure history with Python
         if: always()
         run: |
           python update_allure_history.py -v
         shell: powershell
 
-      # 9. Install Allure CLI and generate report using Python (AFTER tests)
+      # 9. Generate report
       - name: Generate Allure report with Python
         if: always()
         run: |
           python allure_operations.py --install --generate --verbose
         shell: powershell
 
-      # 10. DEBUG: Verify report generation and history preservation
+      # 10. NEW: Clean up Allure's malformed entries
+      - name: Clean Allure-generated history format
+        if: always()
+        run: |
+          python update_allure_history.py --post-cleanup -v
+        shell: powershell
+
+      # 11. DEBUG: Verify report generation and history preservation
       - name: Verify Report Generation and History
         if: always()
         run: |
@@ -171,7 +178,7 @@ jobs:
           }
         shell: powershell
 
-      # 11. CRITICAL: Save history back to Git Storage
+      # 12. CRITICAL: Save history back to Git Storage
       - name: Save History to Git Storage
         if: always()
         run: |
@@ -217,7 +224,7 @@ jobs:
         shell: powershell
         continue-on-error: true
 
-      # 12. DEBUG: Final verification of git storage
+      # 13. DEBUG: Final verification of git storage
       - name: Verify Git Storage Update
         if: always()
         run: |
@@ -239,7 +246,7 @@ jobs:
           cd ..
         shell: powershell
 
-      # 13. Upload full report artifact for deployment (backup method)
+      # 14. Upload full report artifact for deployment (backup method)
       - name: Upload Allure report artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -249,7 +256,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      # 14. Cleanup
+      # 15. Cleanup
       - name: Cleanup temporary files
         if: always()
         run: |

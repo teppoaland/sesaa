@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Allure History Manager - PowerShell compatible with verbose output
+Allure History Manager - Complete with Post-Generation Cleanup
 1. Verifies the history directory structure.
 2. Checks if previous history was downloaded successfully from the artifact.
 3. Manages history-trend.json buildOrder incrementation.
+4. Cleans up malformed data that Allure adds during report generation.
 """
 
 import json
@@ -28,6 +29,76 @@ def clean_history_trend(history_trend):
             if all(key in entry for key in ['buildOrder', 'reportName', 'reportUrl', 'data']):
                 cleaned.append(entry)
     return cleaned
+
+def clean_post_allure_generation(verbose=True):
+    """Clean history after Allure report generation - fixes Allure's malformed entries"""
+    log_message("Starting post-generation history cleanup...", verbose)
+    
+    # Path to the generated report history
+    report_history_dir = Path('./allure-report/history')
+    trend_file = report_history_dir / 'history-trend.json'
+    
+    if not trend_file.exists():
+        log_message("No history-trend.json found in report. Nothing to fix.", verbose)
+        return 0
+    
+    try:
+        with open(trend_file, 'r', encoding='utf-8') as f:
+            allure_data = json.load(f)
+        log_message(f"Loaded history-trend.json with {len(allure_data)} entries", verbose)
+        
+        # Separate the entries
+        valid_entries = []
+        test_data_entries = []
+        
+        for entry in allure_data:
+            if isinstance(entry, dict):
+                if 'buildOrder' in entry and 'reportName' in entry:
+                    # This is a properly formatted entry from our script
+                    valid_entries.append(entry)
+                elif 'data' in entry and 'buildOrder' not in entry:
+                    # This is test data that Allure added without proper structure
+                    test_data_entries.append(entry)
+                    log_message(f"Found malformed entry (missing buildOrder): {entry}", verbose)
+        
+        log_message(f"Found {len(valid_entries)} valid entries and {len(test_data_entries)} malformed entries", verbose)
+        
+        # Merge real test data into valid entries
+        if valid_entries and test_data_entries:
+            # Sort valid entries by buildOrder to get the latest
+            valid_entries.sort(key=lambda x: x.get('buildOrder', 0))
+            latest_entry = valid_entries[-1]
+            
+            # Use the most recent test data (Allure's actual results)
+            if test_data_entries:
+                latest_test_data = test_data_entries[-1]['data']
+                latest_entry['data'] = latest_test_data
+                log_message(f"Updated buildOrder {latest_entry['buildOrder']} with real test data: passed={latest_test_data.get('passed', 0)}, failed={latest_test_data.get('failed', 0)}, total={latest_test_data.get('total', 0)}", verbose)
+        
+        # Keep only valid entries, sorted by buildOrder
+        valid_entries.sort(key=lambda x: x.get('buildOrder', 0))
+        
+        # Save the cleaned data
+        with open(trend_file, 'w', encoding='utf-8') as f:
+            json.dump(valid_entries, f, indent=2, ensure_ascii=False)
+        
+        log_message(f"SUCCESS: Cleaned and saved {len(valid_entries)} valid entries", verbose)
+        
+        # Show final result
+        for entry in valid_entries:
+            total = entry['data']['total']
+            passed = entry['data']['passed']
+            failed = entry['data']['failed']
+            build_order = entry['buildOrder']
+            log_message(f"  BuildOrder {build_order}: {total} tests ({passed} passed, {failed} failed)", verbose)
+        
+        return len(valid_entries)
+        
+    except Exception as e:
+        log_message(f"ERROR: Failed to clean post-generation history: {e}", verbose)
+        import traceback
+        traceback.print_exc()
+        return 0
 
 def manage_allure_history(verbose=True):
     log_message("Starting complete Allure history management...", verbose)
@@ -65,7 +136,8 @@ def manage_allure_history(verbose=True):
                 # Find max buildOrder from valid entries
                 max_order = max(item.get('buildOrder', 0) for item in history_trend)
                 log_message(f"Loaded and cleaned history trend with {len(history_trend)} valid entries. Max buildOrder: {max_order}", verbose)
-                log_message(f"Removed {len(raw_history) - len(history_trend)} invalid entries.", verbose)
+                if len(raw_history) != len(history_trend):
+                    log_message(f"Removed {len(raw_history) - len(history_trend)} invalid entries.", verbose)
             else:
                 # No valid entries found
                 history_trend = []
@@ -89,7 +161,7 @@ def manage_allure_history(verbose=True):
         'reportName': f'Run #{new_order}',
         'reportUrl': f'https://github.com/{os.environ.get("GITHUB_REPOSITORY", "user/repo")}/actions/runs/{os.environ.get("GITHUB_RUN_ID", "1")}',
         'data': { 
-            # Placeholder data - Allure will fill this after report generation
+            # Placeholder data - Allure will fill this with real data during report generation
             'failed': 0, 'broken': 0, 'skipped': 0, 
             'passed': 0, 'unknown': 0, 'total': 0
         }
@@ -151,13 +223,21 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('-s', '--silent', action='store_true', help='Enable silent mode (overrides verbose)')
     parser.add_argument('--clean', action='store_true', help='Clean invalid entries from existing history')
+    parser.add_argument('--post-cleanup', action='store_true', help='Run post-Allure generation cleanup')
     
     args = parser.parse_args()
     verbose = args.verbose and not args.silent
     
     try:
-        manage_allure_history(verbose=verbose)
-        log_message("Allure history management completed successfully.", verbose)
+        if args.post_cleanup:
+            # Run post-generation cleanup
+            entries_count = clean_post_allure_generation(verbose=verbose)
+            log_message(f"Post-generation cleanup completed. {entries_count} entries processed.", verbose)
+        else:
+            # Run normal history management
+            manage_allure_history(verbose=verbose)
+            log_message("Allure history management completed successfully.", verbose)
+        
         sys.exit(0)
     except Exception as e:
         log_message(f"CRITICAL ERROR: {e}", True)
